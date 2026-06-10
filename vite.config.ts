@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/omv-archivercheck/',
+    base: process.env.GITHUB_ACTIONS === 'true' ? '/omv-archivercheck/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
