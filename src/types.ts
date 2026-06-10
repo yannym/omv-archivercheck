@@ -12,6 +12,7 @@ export interface ArchivalFile {
   lastModified: number;
   sourceHandle?: FileSystemFileHandle;
   destHandle?: FileSystemFileHandle;
+  rawWebFile?: File;
   status: 'scanned' | 'pending' | 'hashing_source' | 'copying' | 'hashing_dest' | 'verifying' | 'success' | 'skipped' | 'failed';
   error?: string;
   sourceHash?: string;
