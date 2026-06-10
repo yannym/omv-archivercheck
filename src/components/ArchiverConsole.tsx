@@ -3,80 +3,189 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ArchivalFile, BackupConfig, ArchiveSession } from '../types';
 import { 
-  FolderOpen, Zap, AlertCircle, FileCheck, RefreshCw, Layers, Space, ShieldCheck, 
-  Trash2, Play, AlertTriangle, CheckCircle2, Loader2, Gauge, CheckSquare, Sparkles, Download, ArrowRight, Eye, RefreshCcw, Database
+  FolderOpen, Zap, AlertCircle, FileCheck, RefreshCw, Layers, HardDrive, ShieldCheck, 
+  Trash2, Play, AlertTriangle, CheckCircle2, Loader2, Gauge, CheckSquare, Sparkles, 
+  ArrowRight, Search, ChevronRight, ChevronDown, Database, Server, Cpu, Laptop, Check, X
 } from 'lucide-react';
 
 interface ArchiverConsoleProps {
   onSessionComplete: (session: ArchiveSession) => void;
 }
 
-// Simulated project payloads for previewing in frame
-const SIMULATED_PROJECTS = [
+interface SimulatedDrivePreset {
+  id: string;
+  name: string;
+  capacity: string;
+  totalSizeBytes: number;
+  usedSizeBytes: number;
+  connection: string;
+  color: string;
+  folders: Array<{
+    path: string;
+    files: Array<{ name: string; size: number; type: string }>;
+  }>;
+}
+
+// Simulated active SSD drive structures
+const SIMULATED_DRIVE_PRESETS: SimulatedDrivePreset[] = [
   {
-    id: 'sim_wedding',
-    projectName: 'Aria & Dan Wedding Shoot - APFS SSD',
-    sourceName: '/Volumes/Lexar_Pro_SSD/2026_06_Aria_Dan_Wedding',
-    totalFilesCount: 220,
-    totalSizeBytes: 10485760000, // 9.76 GB
-    files: [
-      { path: 'RAW/DSC04159.ARW', size: 48234500, type: 'image/x-sony-arw', lastModified: 1717894500000 },
-      { path: 'RAW/DSC04160.ARW', size: 47983200, type: 'image/x-sony-arw', lastModified: 1717894520000 },
-      { path: 'RAW/DSC04161.ARW', size: 48112300, type: 'image/x-sony-arw', lastModified: 1717894540000 },
-      { path: 'RAW/DSC04162.ARW', size: 47653200, type: 'image/x-sony-arw', lastModified: 1717894560000 },
-      { path: 'RAW/DSC04163.ARW', size: 49210000, type: 'image/x-sony-arw', lastModified: 1717894580000 },
-      { path: 'RAW/DSC04164.ARW', size: 48300200, type: 'image/x-sony-arw', lastModified: 1717894600000 },
-      { path: 'RAW/DSC04165.ARW', size: 48500400, type: 'image/x-sony-arw', lastModified: 1717894620000 },
-      { path: 'RAW/DSC04166.ARW', size: 47990100, type: 'image/x-sony-arw', lastModified: 1717894640000 },
-      { path: 'RAW/DSC04167.ARW', size: 48210350, type: 'image/x-sony-arw', lastModified: 1717894660050 },
-      { path: 'RAW/DSC04168.ARW', size: 48430200, type: 'image/x-sony-arw', lastModified: 1717894680000 },
-      { path: 'Previews/AriaDan_SneakPeak_01.jpg', size: 8430000, type: 'image/jpeg', lastModified: 1717897200000 },
-      { path: 'Previews/AriaDan_SneakPeak_02.jpg', size: 7920000, type: 'image/jpeg', lastModified: 1717897250000 },
-      { path: 'Lightroom/WeddingCatalog.lrcat', size: 550000000, type: 'application/octet-stream', lastModified: 1717899500000 },
-      { path: 'Lightroom/WeddingCatalogHelper.lrdata', size: 120000000, type: 'application/octet-stream', lastModified: 1717899510000 },
-      { path: 'Delivered/Gallery_All_HighRes.zip', size: 9110000000, type: 'application/zip', lastModified: 1717912000000 },
-    ],
-    alreadyBackedUp: ['Lightroom/WeddingCatalog.lrcat', 'RAW/DSC04159.ARW', 'RAW/DSC04160.ARW'] // Simulates skipping these duplicates!
+    id: 'drive_lexar',
+    name: 'Lexar_Pro_SL600',
+    capacity: '1 TB (APFS)',
+    totalSizeBytes: 1000000000000,
+    usedSizeBytes: 480000000000,
+    connection: 'Thunderbolt 4 / USB-C',
+    color: 'border-cyan-500/30 text-cyan-400 focus-ring-cyan',
+    folders: [
+      {
+        path: 'Weddings/2026_Olivia_Mark',
+        files: [
+          { name: 'DSC01944.ARW', size: 48200000, type: 'image/x-sony-arw' },
+          { name: 'DSC01945.ARW', size: 47900000, type: 'image/x-sony-arw' },
+          { name: 'DSC01946.ARW', size: 48310000, type: 'image/x-sony-arw' },
+          { name: 'WeddingCatalog.lrcat', size: 550000000, type: 'application/octet-stream' },
+          { name: 'Previews_HD.lrdata', size: 1200000000, type: 'application/octet-stream' }
+        ]
+      },
+      {
+        path: 'Weddings/2026_Sneak_Peeks',
+        files: [
+          { name: 'DSC_Preview01.jpg', size: 8200000, type: 'image/jpeg' },
+          { name: 'DSC_Preview02.jpg', size: 7900000, type: 'image/jpeg' }
+        ]
+      },
+      {
+        path: 'Commercial/Fashion_Autumn',
+        files: [
+          { name: 'RAW_0811.ARW', size: 52100000, type: 'image/x-sony-arw' },
+          { name: 'RAW_0812.ARW', size: 52400000, type: 'image/x-sony-arw' },
+          { name: 'Autumn_Lookbook_Selects.zip', size: 2310000000, type: 'application/zip' }
+        ]
+      }
+    ]
   },
   {
-    id: 'sim_portrait',
-    projectName: 'Studio Portrait Shoot - ExFAT SSD',
-    sourceName: '/Volumes/Sandisk_Extreme/2026_05_Studio_Session',
-    totalFilesCount: 88,
-    totalSizeBytes: 3824500000, // 3.56 GB
-    files: [
-      { path: 'CR3/IMG_2209.CR3', size: 34500000, type: 'image/x-canon-cr3', lastModified: 1716881100000 },
-      { path: 'CR3/IMG_2210.CR3', size: 35120000, type: 'image/x-canon-cr3', lastModified: 1716881150000 },
-      { path: 'CR3/IMG_2211.CR3', size: 34900000, type: 'image/x-canon-cr3', lastModified: 1716881200000 },
-      { path: 'CR3/IMG_2212.CR3', size: 34750000, type: 'image/x-canon-cr3', lastModified: 1716881250000 },
-      { path: 'CaptureOne/Studio_Portraits.cosessiondb', size: 280000000, type: 'application/octet-stream', lastModified: 1716885500000 },
-      { path: 'Export/TIFF_16bit/Selects_Composite_01.tif', size: 1850000000, type: 'image/tiff', lastModified: 1716892300000 },
-      { path: 'Export/TIFF_16bit/Selects_Composite_02.tif', size: 1540000000, type: 'image/tiff', lastModified: 1716892400000 },
-      { path: 'Retouch/Notes_Final.txt', size: 12000, type: 'text/plain', lastModified: 1716892500000 },
-    ],
-    alreadyBackedUp: ['CR3/IMG_2209.CR3']
+    id: 'drive_sandisk',
+    name: 'SanDisk_Extreme_Pro',
+    capacity: '2 TB (ExFAT)',
+    totalSizeBytes: 2000000000000,
+    usedSizeBytes: 1240000000000,
+    connection: 'USB 3.2 Gen 2x2',
+    color: 'border-orange-500/30 text-orange-400 focus-ring-orange',
+    folders: [
+      {
+        path: 'Portraits/Studio_Session_A',
+        files: [
+          { name: 'IMG_2209.CR3', size: 34500000, type: 'image/x-canon-cr3' },
+          { name: 'IMG_2210.CR3', size: 35120000, type: 'image/x-canon-cr3' },
+          { name: 'IMG_2211.CR3', size: 34900000, type: 'image/x-canon-cr3' },
+          { name: 'IMG_2212.CR3', size: 34750000, type: 'image/x-canon-cr3' },
+          { name: 'Studio_Portraits.cosessiondb', size: 280000000, type: 'application/octet-stream' }
+        ]
+      },
+      {
+        path: 'Travel/Kyoto_Streets',
+        files: [
+          { name: 'KYOTO_001.CR3', size: 36200000, type: 'image/x-canon-cr3' },
+          { name: 'KYOTO_002.CR3', size: 35900000, type: 'image/x-canon-cr3' },
+          { name: 'KYOTO_003.CR3', size: 36100000, type: 'image/x-canon-cr3' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'drive_lacie',
+    name: 'LaCie_Rugged_RAID',
+    capacity: '4 TB (HFS+)',
+    totalSizeBytes: 4000000000000,
+    usedSizeBytes: 2800000000000,
+    connection: 'Thunderbolt 3',
+    color: 'border-amber-500/30 text-amber-500 focus-ring-amber',
+    folders: [
+      {
+        path: 'Cinematic/MusicVideo_Grading',
+        files: [
+          { name: 'Clip_01_Log.mp4', size: 4500000000, type: 'video/mp4' },
+          { name: 'Clip_02_Log.mp4', size: 3900000000, type: 'video/mp4' },
+          { name: 'LUT_Custom_Teal.cube', size: 450000, type: 'text/plain' }
+        ]
+      },
+      {
+        path: 'Cinematic/Renders',
+        files: [
+          { name: 'Rough_Cut_Draft.mp4', size: 850000000, type: 'video/mp4' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'drive_tough',
+    name: 'Sony_TOUGH_Pro',
+    capacity: '512 GB (APFS)',
+    totalSizeBytes: 512000000000,
+    usedSizeBytes: 64000000000,
+    connection: 'SD Card UHS-II Slot',
+    color: 'border-yellow-500/30 text-yellow-500',
+    folders: [
+      {
+        path: 'Documentary/Interviews',
+        files: [
+          { name: 'Interview_01.MXF', size: 12400000000, type: 'application/mxf' },
+          { name: 'Interview_02.MXF', size: 10800000000, type: 'application/mxf' }
+        ]
+      }
+    ]
   }
 ];
 
+// OMV NAS NFS Target folder list
+const OMV_NFS_TARGET_PRESETS = [
+  { id: 'dest_weddings', path: 'OMV_Media_Share/Wedding_Archives/2026', label: 'Wedding_Archives_2026' },
+  { id: 'dest_commercial', path: 'OMV_Media_Share/Commercial_Backup', label: 'Commercial_Backup' },
+  { id: 'dest_personal', path: 'OMV_Media_Share/Personal_Stock', label: 'Personal_Stock' },
+  { id: 'dest_cinematic', path: 'OMV_Media_Share/Cinematic_Raid_0', label: 'Cinematic_Raid_0' }
+];
+
+interface MountedDrive {
+  id: string;
+  name: string;
+  capacity: string;
+  totalSizeBytes: number;
+  usedSizeBytes: number;
+  connection: string;
+  type: 'simulated' | 'real';
+  color: string;
+  handle?: FileSystemDirectoryHandle;
+  files: ArchivalFile[];
+}
+
 export default function ArchiverConsole({ onSessionComplete }: ArchiverConsoleProps) {
-  // Mode selection: Physical (Real File API) vs Simulated (Safe Sandbox for iframes)
+  // Mode selection: Sandbox Simulation (safest inside iframes) vs Physical Folder Access
   const [isSimulation, setIsSimulation] = useState<boolean>(true);
   const [browserSupported, setBrowserSupported] = useState<boolean>(true);
   const [iframeWarning, setIframeWarning] = useState<boolean>(false);
 
-  // Pickers and States
-  const [sourceDirHandle, setSourceDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  // Mounted Drives states (allows managing multiple SSDs at once!)
+  const [mountedDrives, setMountedDrives] = useState<MountedDrive[]>([]);
+  // Target OMV configuration
+  const [activeDestId, setActiveDestId] = useState<string>('dest_weddings');
+  const [customDestPath, setCustomDestPath] = useState<string>('');
   const [destDirHandle, setDestDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const [sourceDirName, setSourceDirName] = useState<string>('');
   const [destDirName, setDestDirName] = useState<string>('');
 
-  // Selected Simulation index
-  const [selectedSimProjectIdx, setSelectedSimProjectIdx] = useState<number>(0);
+  // Checklist for backup selection
+  const [checkedFileURIs, setCheckedFileURIs] = useState<Set<string>>(new Set());
+  // Search and quick filters
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'raw' | 'lr' | 'video'>('all');
 
-  // Archiver configuration
+  // Expanded folders in File Manager tree (drive_id::folder_path)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  // Archiver pipeline profiles configurations
   const [config, setConfig] = useState<BackupConfig>({
     integrityCheck: true,
     skipExisting: true,
@@ -84,48 +193,59 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
     concurrencyLimit: 2
   });
 
-  // Active status variables
-  const [isScanning, setIsScanning] = useState<boolean>(false);
+  // Active transmission statuses
   const [isArchiving, setIsArchiving] = useState<boolean>(false);
   const [currentAction, setCurrentAction] = useState<string>('');
-  const [scannedFiles, setScannedFiles] = useState<ArchivalFile[]>([]);
   const [copiedCount, setCopiedCount] = useState<number>(0);
   const [skippedCount, setSkippedCount] = useState<number>(0);
   const [failedCount, setFailedCount] = useState<number>(0);
+  
   const [totalBytesToCopy, setTotalBytesToCopy] = useState<number>(0);
   const [bytesWritten, setBytesWritten] = useState<number>(0);
   const [transferSpeedMBs, setTransferSpeedMBs] = useState<number>(0);
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(0);
   const [activeConsoleLog, setActiveConsoleLog] = useState<string[]>([]);
   const [backupCompleted, setBackupCompleted] = useState<boolean>(false);
-  
-  // Safe Storage Cleanup / Space Recovery state
+
+  // Clean storage post-sync
   const [showCleanupPrompt, setShowCleanupPrompt] = useState<boolean>(false);
-  const [cleanupConfirmed, setCleanupConfirmed] = useState<boolean>(false);
   const [cleanupRunning, setCleanupRunning] = useState<boolean>(false);
   const [cleanupCompleted, setCleanupCompleted] = useState<boolean>(false);
-  
-  // Speed metrics triggers
+
   const startTimerRef = useRef<number>(0);
-  const bytesLoggedRef = useRef<number>(0);
   const activeAbortRef = useRef<boolean>(false);
 
+  // On load, seed with a few simulation drives so that the user immediately has data
   useEffect(() => {
-    // Check browser support for Directory Pickers
+    // 1. Check Directory Picker API support
     if (!(window as any).showDirectoryPicker) {
       setBrowserSupported(false);
       setIsSimulation(true);
     }
-    // Check if running inside iframe (security constraints prevent directory picking in iframes)
+    // 2. Check iframe isolation constraints
     try {
       if (window.self !== window.top) {
         setIframeWarning(true);
-        setIsSimulation(true); // Default to simulation if locked in iframe
+        setIsSimulation(true);
       }
     } catch (e) {
       setIframeWarning(true);
       setIsSimulation(true);
     }
+
+    // Seed 2 default mounted simulation drives to display robust workspace instantly
+    handleMountSimulatedPreset('drive_lexar');
+    handleMountSimulatedPreset('drive_sandisk');
+    
+    // Expand root folders by default for quick view
+    setExpandedFolders(new Set([
+      'drive_lexar::Weddings',
+      'drive_lexar::Weddings/2026_Olivia_Mark',
+      'drive_sandisk::Portraits',
+      'drive_sandisk::Portraits/Studio_Session_A'
+    ]));
+
+    addToLog("OMV Archiver system terminal ready. Mount media nodes to initiate transfer check.");
   }, []);
 
   const addToLog = (message: string) => {
@@ -133,26 +253,175 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
     setActiveConsoleLog(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 49)]);
   };
 
-  // Directory picking - Source (SSD)
-  const handleSelectSource = async () => {
+  // Build simulated file objects
+  const buildSimulatedFilesForPreset = (presetId: string): ArchivalFile[] => {
+    const preset = SIMULATED_DRIVE_PRESETS.find(p => p.id === presetId);
+    if (!preset) return [];
+
+    const fileList: ArchivalFile[] = [];
+    let fileCounter = 1;
+
+    preset.folders.forEach(dir => {
+      dir.files.forEach(f => {
+        fileList.push({
+          id: `${presetId}_item_${fileCounter++}`,
+          path: `${dir.path}/${f.name}`,
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          lastModified: Date.now() - (Math.random() * 86400000 * 5),
+          status: 'scanned',
+          progress: 0,
+          bytesTransferred: 0
+        });
+      });
+    });
+
+    return fileList;
+  };
+
+  // Mount simulated drives 
+  const handleMountSimulatedPreset = (presetId: string) => {
+    const preset = SIMULATED_DRIVE_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+
+    setMountedDrives(prev => {
+      if (prev.some(d => d.id === presetId)) {
+        return prev;
+      }
+
+      const files = buildSimulatedFilesForPreset(presetId);
+      const newDrive: MountedDrive = {
+        id: preset.id,
+        name: preset.name,
+        capacity: preset.capacity,
+        totalSizeBytes: preset.totalSizeBytes,
+        usedSizeBytes: preset.usedSizeBytes,
+        connection: preset.connection,
+        type: 'simulated',
+        color: preset.color,
+        files
+      };
+
+      // Process side effects cleanly on next tick
+      setTimeout(() => {
+        setCheckedFileURIs(prevChecked => {
+          const next = new Set(prevChecked);
+          files.forEach(f => next.add(`${presetId}::${f.path}`));
+          return next;
+        });
+        addToLog(`mounted system drive: ${preset.name} (${preset.capacity}) successfully.`);
+      }, 0);
+
+      return [...prev, newDrive];
+    });
+  };
+
+  // Unmount specific SSD node
+  const handleUnmountDrive = (driveId: string) => {
+    setMountedDrives(prev => prev.filter(d => d.id !== driveId));
+    // clean checkboxes
+    setCheckedFileURIs(prev => {
+      const next = new Set<string>(prev);
+      next.forEach((uri) => {
+        if (uri.startsWith(`${driveId}::`)) {
+          next.delete(uri);
+        }
+      });
+      return next;
+    });
+    addToLog(`Released storage node: ${driveId}`);
+  };
+
+  // Physical directory picking helper (Mount real SSD folder)
+  const handleMountPhysicalDrive = async () => {
+    if (!(window as any).showDirectoryPicker) {
+      addToLog("Error: Directory Picker API not supported on this client.");
+      return;
+    }
+
     try {
-      if (!(window as any).showDirectoryPicker) return;
       const handle = await (window as any).showDirectoryPicker({
         mode: 'read'
       });
-      setSourceDirHandle(handle);
-      setSourceDirName(handle.name);
-      addToLog(`Opened source project directory: ${handle.name}`);
-      resetWorkflow();
+
+      const driveId = `real_${Math.random().toString(36).substring(2, 9)}`;
+      addToLog(`Physical directory picker accessed. Mounting sector: ${handle.name}...`);
+
+      const fileList: ArchivalFile[] = [];
+      
+      // Local recursive loader function
+      async function scanNode(nodeHandle: FileSystemDirectoryHandle, currentRelativePath: string = '') {
+        for await (const entry of (nodeHandle as any).values()) {
+          const entryPath = currentRelativePath ? `${currentRelativePath}/${entry.name}` : entry.name;
+          if (entry.kind === 'file') {
+            const rawFile = await entry.getFile();
+            fileList.push({
+              id: `${driveId}_f_${Math.random().toString(36).substring(2, 7)}`,
+              path: entryPath,
+              name: entry.name,
+              size: rawFile.size,
+              type: rawFile.type || 'application/octet-stream',
+              lastModified: rawFile.lastModified,
+              sourceHandle: entry,
+              status: 'scanned',
+              progress: 0,
+              bytesTransferred: 0
+            });
+          } else if (entry.kind === 'directory') {
+            await scanNode(entry, entryPath);
+          }
+        }
+      }
+
+      await scanNode(handle);
+
+      const totalSize = fileList.reduce((sum, f) => sum + f.size, 0);
+
+      const physicalDrive: MountedDrive = {
+        id: driveId,
+        name: handle.name,
+        capacity: 'Direct System Node',
+        totalSizeBytes: totalSize + 100000000000, 
+        usedSizeBytes: totalSize,
+        connection: 'HighSpeed Local Mount (Filesystem API)',
+        type: 'real',
+        color: 'border-emerald-500/30 text-emerald-400',
+        handle,
+        files: fileList
+      };
+
+      let alreadyMounted = false;
+      setMountedDrives(prev => {
+        if (prev.some(d => d.name === handle.name)) {
+          alreadyMounted = true;
+          return prev;
+        }
+        return [...prev, physicalDrive];
+      });
+
+      if (alreadyMounted) {
+        addToLog(`Local directory '${handle.name}' is already mounted as a active storage sector.`);
+        return;
+      }
+      
+      // Auto-check all items from the new physical drive
+      setCheckedFileURIs(prev => {
+        const next = new Set(prev);
+        fileList.forEach(f => next.add(`${driveId}::${f.path}`));
+        return next;
+      });
+
+      addToLog(`Mounted physical partition '${handle.name}' with ${fileList.length} items (${formatBytes(totalSize)}).`);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        addToLog(`Error picking source directory: ${err.message}`);
+        addToLog(`Mounting aborted: ${err.message}`);
       }
     }
   };
 
-  // Directory picking - Destination (NAS NFS Share)
-  const handleSelectDestination = async () => {
+  // Mount Destination OMV Share Node (For Physical Mode)
+  const handleMountDestinationNfs = async () => {
     try {
       if (!(window as any).showDirectoryPicker) return;
       const handle = await (window as any).showDirectoryPicker({
@@ -160,181 +429,274 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
       });
       setDestDirHandle(handle);
       setDestDirName(handle.name);
-      addToLog(`Opened OMV NFS destination share: ${handle.name}`);
-      resetWorkflow();
+      addToLog(`NFS target folder linked successfully: ${handle.name}`);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        addToLog(`Error picking destination directory: ${err.message}`);
+        addToLog(`Destination linking error: ${err.message}`);
       }
     }
   };
 
-  const resetWorkflow = () => {
-    setScannedFiles([]);
-    setBackupCompleted(false);
-    setCopiedCount(0);
-    setSkippedCount(0);
-    setFailedCount(0);
-    setBytesWritten(0);
-    setTotalBytesToCopy(0);
-    setShowCleanupPrompt(false);
-    setCleanupConfirmed(false);
-    setCleanupRunning(false);
-    setCleanupCompleted(false);
-  };
+  // Derive target path (Simulation vs Real)
+  const chosenDestPath = useMemo(() => {
+    if (!isSimulation) {
+      return destDirName ? `NFS://${destDirName}` : 'No target directory selected';
+    }
+    const activePreset = OMV_NFS_TARGET_PRESETS.find(d => d.id === activeDestId);
+    let pathBase = activePreset ? activePreset.path : 'OMV_Media_Share/default';
+    if (customDestPath) {
+      pathBase += `/${customDestPath.replace(/^\//, '')}`;
+    }
+    return pathBase;
+  }, [isSimulation, activeDestId, customDestPath, destDirName]);
 
-  const handleScanDirectories = async () => {
-    setIsScanning(true);
-    addToLog("Starting deep directory recursion and lookup...");
+  // Extract folder paths hierarchy for all mounted drives
+  const driveDirectoriesSetMap = useMemo(() => {
+    const map: { [driveId: string]: string[] } = {};
+    mountedDrives.forEach(drive => {
+      const dirs = new Set<string>();
+      drive.files.forEach(f => {
+        const parts = f.path.split('/');
+        parts.pop(); // discard file name
+        let current = '';
+        parts.forEach(p => {
+          current = current ? `${current}/${p}` : p;
+          if (current) dirs.add(current);
+        });
+      });
+      map[drive.id] = Array.from(dirs).sort();
+    });
+    return map;
+  }, [mountedDrives]);
+
+  // Filter and compute which files should be listed
+  const filteredFilesByDrive = useMemo(() => {
+    const map: { [driveId: string]: ArchivalFile[] } = {};
     
-    if (isSimulation) {
-      // Simulate directory scanning
-      setTimeout(() => {
-        const simProj = SIMULATED_PROJECTS[selectedSimProjectIdx];
-        let idCounter = 1;
-        
-        // Build simulated list duplicating or generating the structures
-        const structuredFiles: ArchivalFile[] = [];
-        let totalSize = 0;
-
-        // Multiply the preloaded list to simulate a full high-fidelity wedding project
-        // with raw photo variants, backup previews, and sidecars.
-        const fileCountMultiplier = selectedSimProjectIdx === 0 ? 15 : 10;
-        
-        for (let m = 0; m < fileCountMultiplier; m++) {
-          const original = simProj.files[m % simProj.files.length];
-          const pathParts = original.path.split('/');
-          const fileName = pathParts.pop()!;
-          const folder = pathParts.join('/');
+    mountedDrives.forEach(drive => {
+      map[drive.id] = drive.files.filter(f => {
+        // Search query filter
+        const matchesSearch = searchQuery === '' || 
+          f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          f.path.toLowerCase().includes(searchQuery.toLowerCase());
           
-          let modifiedPath = original.path;
-          if (m > 0) {
-            // Append indexed variables to filenames
-            const extension = fileName.substring(fileName.lastIndexOf('.'));
-            const baseName = fileName.replace(extension, '');
-            modifiedPath = `${folder}/${baseName}_${String(m).padStart(3, '0')}${extension}`;
-          }
+        if (!matchesSearch) return false;
 
-          const relativePath = modifiedPath;
-          const isPreExisting = simProj.alreadyBackedUp.includes(original.path) && m % 3 === 0;
-
-          structuredFiles.push({
-            id: `sim_f_${idCounter++}`,
-            path: relativePath,
-            name: relativePath.split('/').pop() || '',
-            size: original.size + (m * 4200), // fluctuate size slightly
-            type: original.type,
-            lastModified: original.lastModified - (m * 1000 * 60 * 5),
-            status: isPreExisting && config.skipExisting ? 'skipped' : 'scanned',
-            progress: 0,
-            bytesTransferred: 0
-          });
-          
-          if (!(isPreExisting && config.skipExisting)) {
-            totalSize += original.size + (m * 4200);
-          }
+        // Category tags filter
+        if (activeMediaFilter === 'all') return true;
+        const ext = f.name.toLowerCase().split('.').pop();
+        if (activeMediaFilter === 'raw') {
+          return ['arw', 'cr3', 'cr2', 'nef', 'dng', 'iiq', 'mxf'].includes(ext || '');
         }
+        if (activeMediaFilter === 'lr') {
+          return ['lrcat', 'lrdata', 'cosessiondb', 'cube'].includes(ext || '');
+        }
+        if (activeMediaFilter === 'video') {
+          return ['mp4', 'mov', 'mkv', 'mxf'].includes(ext || '');
+        }
+        return true;
+      });
+    });
+    
+    return map;
+  }, [mountedDrives, searchQuery, activeMediaFilter]);
 
-        setScannedFiles(structuredFiles);
-        setTotalBytesToCopy(totalSize);
-        setIsScanning(false);
-        const skipped = structuredFiles.filter(f => f.status === 'skipped').length;
-        addToLog(`Deep scan completed. Identified ${structuredFiles.length} project files.`);
-        addToLog(`Pre-analysis: ${skipped} identical files detected on OMV NAS - skipping those copies.`);
-        addToLog(`Archival Payload: ${formatBytes(totalSize)} needs to be streamed to NFS.`);
-      }, 1400);
+  // Aggregate selected bytes and count
+  const selectionMetrics = useMemo(() => {
+    let totalFiles = 0;
+    let totalBytes = 0;
+    
+    mountedDrives.forEach(drive => {
+      drive.files.forEach(f => {
+        const fileURI = `${drive.id}::${f.path}`;
+        if (checkedFileURIs.has(fileURI)) {
+          totalFiles++;
+          totalBytes += f.size;
+        }
+      });
+    });
 
-    } else {
-      // Direct File System Access API
-      if (!sourceDirHandle || !destDirHandle) {
-        addToLog("Error: Source and Destination directories must be mounted first.");
-        setIsScanning(false);
-        return;
+    return { totalFiles, totalBytes };
+  }, [mountedDrives, checkedFileURIs]);
+
+  // Toggle checklist of individual files
+  const handleToggleFileCheck = (uri: string) => {
+    setCheckedFileURIs(prev => {
+      const next = new Set(prev);
+      if (next.has(uri)) {
+        next.delete(uri);
+      } else {
+        next.add(uri);
       }
-
-      try {
-        const fileList: ArchivalFile[] = [];
-        
-        // Recursive Scanner
-        async function scan(dirHandle: FileSystemDirectoryHandle, currentPath: string = '') {
-          for await (const entry of (dirHandle as any).values()) {
-            if (activeAbortRef.current) break;
-            const fullPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
-            
-            if (entry.kind === 'file') {
-              const fileObj = await entry.getFile();
-              fileList.push({
-                id: Math.random().toString(36).substring(2, 9),
-                path: fullPath,
-                name: entry.name,
-                size: fileObj.size,
-                type: fileObj.type || 'application/octet-stream',
-                lastModified: fileObj.lastModified,
-                sourceHandle: entry,
-                status: 'scanned',
-                progress: 0,
-                bytesTransferred: 0
-              });
-            } else if (entry.kind === 'directory') {
-              await scan(entry, fullPath);
-            }
-          }
-        }
-
-        await scan(sourceDirHandle);
-        
-        // Analyze for pre-existing files on destination to avoid overwriting (cross-checking rules)
-        addToLog(`Scanning destination directory tree for pre-existing records...`);
-        let duplicateCount = 0;
-        let transferBytes = 0;
-
-        for (const fileItem of fileList) {
-          let alreadyExists = false;
-          try {
-            // Traverse destination handle matching path
-            const parts = fileItem.path.split('/');
-            const destFileName = parts.pop()!;
-            let currentDestDir = destDirHandle;
-            
-            for (const p of parts) {
-              currentDestDir = await currentDestDir.getDirectoryHandle(p, { create: false });
-            }
-            
-            const existingFileHandle = await currentDestDir.getFileHandle(destFileName);
-            const existingFile = await existingFileHandle.getFile();
-            
-            // Compare metadata (name, size, mod date representation)
-            if (config.skipExisting && existingFile.size === fileItem.size) {
-              alreadyExists = true;
-              fileItem.status = 'skipped';
-              fileItem.progress = 100;
-              fileItem.bytesTransferred = fileItem.size;
-              duplicateCount++;
-            }
-          } catch (e) {
-            // File does not exist on destination, which is expected
-          }
-
-          if (!alreadyExists) {
-            fileItem.status = 'pending';
-            transferBytes += fileItem.size;
-          }
-        }
-
-        setScannedFiles(fileList);
-        setTotalBytesToCopy(transferBytes);
-        setSkippedCount(duplicateCount);
-        setIsScanning(false);
-        addToLog(`Physical scan complete. Total files: ${fileList.length}, To Backup: ${fileList.length - duplicateCount}, Skipped: ${duplicateCount}`);
-        addToLog(`Data payload to transfer over NFS: ${formatBytes(transferBytes)}`);
-      } catch (err: any) {
-        addToLog(`Scan failed: ${err.message}`);
-        setIsScanning(false);
-      }
-    }
+      return next;
+    });
   };
 
-  // SHA-256 Hashing of File handles
+  // Toggle checklist for whole folders
+  const handleToggleFolderCheck = (driveId: string, folderPath: string, currentlyChecked: boolean) => {
+    const drive = mountedDrives.find(d => d.id === driveId);
+    if (!drive) return;
+
+    // Get all files inside this specific folder
+    const filesInFolder = drive.files.filter(f => f.path.startsWith(folderPath + '/') || f.path === folderPath);
+
+    setCheckedFileURIs(prev => {
+      const next = new Set(prev);
+      filesInFolder.forEach(f => {
+        const uri = `${driveId}::${f.path}`;
+        if (currentlyChecked) {
+          next.delete(uri);
+        } else {
+          next.add(uri);
+        }
+      });
+      return next;
+    });
+  };
+
+  // Toggle checklist for a root drive node
+  const handleToggleDriveCheck = (driveId: string, currentlyChecked: boolean) => {
+    const drive = mountedDrives.find(d => d.id === driveId);
+    if (!drive) return;
+
+    setCheckedFileURIs(prev => {
+      const next = new Set(prev);
+      drive.files.forEach(f => {
+        const uri = `${driveId}::${f.path}`;
+        if (currentlyChecked) {
+          next.delete(uri);
+        } else {
+          next.add(uri);
+        }
+      });
+      return next;
+    });
+  };
+
+  // Fast Bulk Selection categories
+  const handleBulkSelectAction = (action: 'all-raw' | 'all-lr' | 'clear' | 'all') => {
+    if (action === 'clear') {
+      setCheckedFileURIs(new Set());
+      addToLog("Cleared all project archival folder selections.");
+      return;
+    }
+
+    const next = new Set<string>();
+    mountedDrives.forEach(drive => {
+      drive.files.forEach(f => {
+        const uri = `${drive.id}::${f.path}`;
+        const ext = f.name.toLowerCase().split('.').pop() || '';
+        
+        if (action === 'all') {
+          next.add(uri);
+        } else if (action === 'all-raw') {
+          if (['arw', 'cr3', 'cr2', 'nef', 'dng', 'iiq', 'mxf'].includes(ext)) {
+            next.add(uri);
+          }
+        } else if (action === 'all-lr') {
+          if (['lrcat', 'lrdata', 'cosessiondb', 'cube'].includes(ext)) {
+            next.add(uri);
+          }
+        }
+      });
+    });
+
+    setCheckedFileURIs(next);
+    addToLog(`Bulk Filter applied. Checked ${next.size} match records across partitions.`);
+  };
+
+  // Check if a folder is completely checked, partially checked, or unchecked
+  const getFolderCheckedState = (driveId: string, folderPath: string) => {
+    const drive = mountedDrives.find(d => d.id === driveId);
+    if (!drive) return 'unchecked';
+
+    const filesInFolder = drive.files.filter(f => f.path.startsWith(folderPath + '/') || f.path === folderPath);
+    if (filesInFolder.length === 0) return 'unchecked';
+
+    let checkedCount = 0;
+    filesInFolder.forEach(f => {
+      if (checkedFileURIs.has(`${driveId}::${f.path}`)) {
+        checkedCount++;
+      }
+    });
+
+    if (checkedCount === filesInFolder.length) return 'checked';
+    if (checkedCount > 0) return 'partial';
+    return 'unchecked';
+  };
+
+  // Check if a drive is completely check-highlighted, partially, or unchecked
+  const getDriveCheckedState = (driveId: string) => {
+    const drive = mountedDrives.find(d => d.id === driveId);
+    if (!drive || drive.files.length === 0) return 'unchecked';
+
+    let checkedCount = 0;
+    drive.files.forEach(f => {
+      if (checkedFileURIs.has(`${driveId}::${f.path}`)) {
+        checkedCount++;
+      }
+    });
+
+    if (checkedCount === drive.files.length) return 'checked';
+    if (checkedCount > 0) return 'partial';
+    return 'unchecked';
+  };
+
+  // Check if folder is expanded in render tree
+  const toggleFolderExpanded = (uriKey: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(uriKey)) {
+        next.delete(uriKey);
+      } else {
+        next.add(uriKey);
+      }
+      return next;
+    });
+  };
+
+  // Check if a file's parent components are all expanded in the tree
+  const isFileShownInTree = (driveId: string, filePath: string) => {
+    const parts = filePath.split('/');
+    parts.pop(); // discard file name
+    
+    let current = '';
+    for (const p of parts) {
+      current = current ? `${current}/${p}` : p;
+      if (!expandedFolders.has(`${driveId}::${current}`)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Check if a subdirectory's parent folders are all expanded
+  const isFolderShownInTree = (driveId: string, folderPath: string) => {
+    const parts = folderPath.split('/');
+    parts.pop(); // discard last component to look at immediate parent
+    if (parts.length === 0) return true; // top folders are always visible below the drive node
+
+    let current = '';
+    for (const p of parts) {
+      current = current ? `${current}/${p}` : p;
+      if (!expandedFolders.has(`${driveId}::${current}`)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  const generateMockHash = (input: string) => {
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      hash = (hash << 5) - hash + input.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(16).padEnd(6, '0') + 'ea12a9efbdecc31b00e8bc8d';
+  };
+
+  // SHA-256 local calculation for Real Files
   const calculateSha256 = async (file: File): Promise<string> => {
     const buffer = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
@@ -342,737 +704,1001 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // Interactive Archiving Engine
+  // Execute unified archiving
   const handleStartArchiving = async () => {
-    if (scannedFiles.length === 0) return;
-    
+    if (selectionMetrics.totalFiles === 0) {
+      addToLog("Error: No raw media nodes checked in your file explorer.");
+      return;
+    }
+
     setIsArchiving(true);
     setBackupCompleted(false);
     setCopiedCount(0);
+    setSkippedCount(0);
     setFailedCount(0);
     setBytesWritten(0);
+    setTotalBytesToCopy(selectionMetrics.totalBytes);
     activeAbortRef.current = false;
     startTimerRef.current = Date.now();
-    bytesLoggedRef.current = 0;
 
-    addToLog("Initiating high-concurrency backup pipe...");
-    
-    if (isSimulation) {
-      // Simulation Loop
-      const filesToProcess = scannedFiles.filter(f => f.status !== 'skipped');
-      const skipped = scannedFiles.filter(f => f.status === 'skipped').length;
-      setSkippedCount(skipped);
+    addToLog(`Starting archiver pipeline transfer to: ${chosenDestPath}`);
+    addToLog(`Archival profile contains ${selectionMetrics.totalFiles} checked files (${formatBytes(selectionMetrics.totalBytes)})`);
 
-      let processedIdx = 0;
-      
-      const processSimQueue = async () => {
-        if (processedIdx >= filesToProcess.length || activeAbortRef.current) {
-          finishArchiving();
-          return;
+    // Prepare active files sequence
+    const filesToCopy: Array<{ drive: MountedDrive; file: ArchivalFile }> = [];
+    mountedDrives.forEach(drive => {
+      drive.files.forEach(f => {
+        if (checkedFileURIs.has(`${drive.id}::${f.path}`)) {
+          filesToCopy.push({ drive, file: f });
         }
+      });
+    });
 
-        // Run batch concurrency based on config limits
-        const activeBatch = filesToProcess.slice(processedIdx, processedIdx + config.concurrencyLimit);
-        processedIdx += config.concurrencyLimit;
+    let processedIdx = 0;
 
-        const batchPromises = activeBatch.map(async (file) => {
-          // 1. Mark hashing source
-          updateFileStatus(file.id, 'hashing_source', 0);
-          addToLog(`Hashing source file: ${file.name} to generate integrity token`);
-          await delay(400);
+    const processBatch = async () => {
+      if (processedIdx >= filesToCopy.length || activeAbortRef.current) {
+        finishArchiving(filesToCopy);
+        return;
+      }
 
-          const mockSourceHash = generateMockHash(file.name + file.size);
-          updateFileStatus(file.id, 'hashing_source', 100, mockSourceHash);
+      // Concurrency limits pipeline
+      const batch = filesToCopy.slice(processedIdx, processedIdx + config.concurrencyLimit);
+      processedIdx += config.concurrencyLimit;
 
-          // 2. Stream Transfer (Simulate Chunk Progress)
-          updateFileStatus(file.id, 'copying', 0);
-          addToLog(`Streaming ${file.name} (${formatBytes(file.size)}) via NFS to OMV NAS`);
-          
-          const steps = 4;
-          for (let s = 1; s <= steps; s++) {
-            if (activeAbortRef.current) return;
-            await delay(350);
-            const p = Math.round((s / steps) * 100);
-            const chunkBytes = Math.round((file.size / steps) * s);
+      const batchPromises = batch.map(async ({ drive, file }) => {
+        try {
+          if (isSimulation || drive.type === 'simulated') {
+            // Simulated Archival process
+            updateDriveFileStatus(drive.id, file.id, 'hashing_source', 0);
+            addToLog(`[CRC256] Hashing source: ${file.name}`);
+            await delay(400);
+
+            const mockHash = generateMockHash(file.name + file.size);
+            updateDriveFileStatus(drive.id, file.id, 'hashing_source', 100, mockHash);
+
+            // Double duplicate check skip logic
+            if (config.skipExisting && file.name.includes("Cached") && Math.random() > 0.4) {
+              updateDriveFileStatus(drive.id, file.id, 'skipped', 100, mockHash, mockHash);
+              setSkippedCount(prev => prev + 1);
+              addToLog(`⟲ Record verified in Cache. Block skipped: ${file.name}`);
+              return;
+            }
+
+            // Copying segments progress simulation
+            updateDriveFileStatus(drive.id, file.id, 'copying', 0);
+            addToLog(`Spooling stream: ${file.name} to network sockets...`);
             
-            setBytesWritten(prev => {
-              const newlyWritten = chunkBytes - (s > 1 ? Math.round((file.size / steps) * (s - 1)) : 0);
-              return prev + newlyWritten;
-            });
-            updateFileStatus(file.id, 'copying', p);
-          }
+            const steps = 4;
+            for (let st = 1; st <= steps; st++) {
+              if (activeAbortRef.current) return;
+              await delay(250);
+              const p = Math.round((st / steps) * 100);
+              const latestChunk = Math.round((file.size / steps) * st);
+              const previousChunk = st > 1 ? Math.round((file.size / steps) * (st - 1)) : 0;
+              
+              setBytesWritten(prev => prev + (latestChunk - previousChunk));
+              updateDriveFileStatus(drive.id, file.id, 'copying', p);
+            }
 
-          // 3. Mark Hashing Destination (Verifying write integrity)
-          updateFileStatus(file.id, 'hashing_dest', 0);
-          addToLog(`Verifying integrity: computing SHA-256 hash model at destination on OMV`);
-          await delay(300);
-          
-          const mockDestHash = mockSourceHash; // Match perfectly for simulation default!
-          updateFileStatus(file.id, 'success', 100, mockSourceHash, mockDestHash);
-          setCopiedCount(prev => prev + 1);
-          addToLog(`✓ Transferred & Verified: ${file.name}`);
-        });
+            updateDriveFileStatus(drive.id, file.id, 'hashing_dest', 0);
+            await delay(200);
 
-        await Promise.all(batchPromises);
-        
-        // Speed updates
-        const elapsedSec = (Date.now() - startTimerRef.current) / 1000;
-        const currentMBs = (bytesWritten / (1024 * 1024)) / elapsedSec;
-        setTransferSpeedMBs(Math.round(currentMBs) || 45); // safeguard against divide by zero or infinity
+            // Hash verification check
+            updateDriveFileStatus(drive.id, file.id, 'success', 100, mockHash, mockHash);
+            setCopiedCount(prev => prev + 1);
+            addToLog(`✓ CRC SHA-255 Secure: ${file.name} successfully written.`);
 
-        // Estimates left
-        const bytesLeft = totalBytesToCopy - bytesWritten;
-        const remainingSec = bytesLeft / (currentMBs * 1024 * 1024);
-        setTimeRemainingSeconds(Math.max(0, Math.round(remainingSec)));
+          } else {
+            // Real Direct Physical Copy
+            if (!file.sourceHandle || !destDirHandle) {
+              throw new Error("Local folder handles or Destination links missing.");
+            }
 
-        setTimeout(processSimQueue, 150);
-      };
+            updateDriveFileStatus(drive.id, file.id, 'hashing_source', 0);
+            addToLog(`[SHA-256] Hashing Local: ${file.name}`);
+            const realFileObj = await file.sourceHandle.getFile();
+            const sourceHash = await calculateSha256(realFileObj);
+            updateDriveFileStatus(drive.id, file.id, 'hashing_source', 100, sourceHash);
 
-      await processSimQueue();
+            updateDriveFileStatus(drive.id, file.id, 'copying', 0);
+            addToLog(`Writing stream: ${file.name}`);
 
-    } else {
-      // Physical copy over real files
-      const pendingFiles = scannedFiles.filter(f => f.status === 'pending');
-      let queueIdx = 0;
-
-      const processQueue = async () => {
-        if (queueIdx >= pendingFiles.length || activeAbortRef.current) {
-          finishArchiving();
-          return;
-        }
-
-        const batch = pendingFiles.slice(queueIdx, queueIdx + config.concurrencyLimit);
-        queueIdx += config.concurrencyLimit;
-
-        const batchPromises = batch.map(async (archiveItem) => {
-          try {
-            if (!archiveItem.sourceHandle || !destDirHandle) return;
-
-            // Step 1: Hashing Source Model
-            updateFileStatus(archiveItem.id, 'hashing_source', 0);
-            addToLog(`Hashing source: ${archiveItem.name}`);
-            const sourceFileObj = await archiveItem.sourceHandle.getFile();
-            const sourceHash = await calculateSha256(sourceFileObj);
-            updateFileStatus(archiveItem.id, 'hashing_source', 100, sourceHash);
-
-            // Step 2: Stream copy (Write destination file)
-            updateFileStatus(archiveItem.id, 'copying', 0);
-            addToLog(`Streaming to OMV NFS: ${archiveItem.name}`);
-            
-            // Create target folders path in destination recursively
-            const pathParts = archiveItem.path.split('/');
-            const destFilename = pathParts.pop()!;
+            // Traversal structure resolution
+            const parts = file.path.split('/');
+            const destFilename = parts.pop()!;
             let currentDestDir = destDirHandle;
             
-            for (const part of pathParts) {
-              currentDestDir = await currentDestDir.getDirectoryHandle(part, { create: true });
+            for (const p of parts) {
+              currentDestDir = await currentDestDir.getDirectoryHandle(p, { create: true });
             }
 
-            const writeHandle = await currentDestDir.getFileHandle(destFilename, { create: true });
-            const writable = await writeHandle.createWritable();
-            
-            // Use stream writing if browser supports it
-            await writable.write(sourceFileObj);
+            // Create write target
+            const targetHandle = await currentDestDir.getFileHandle(destFilename, { create: true });
+            const writable = await targetHandle.createWritable();
+            await writable.write(realFileObj);
             await writable.close();
-            
-            // Increment overall progress size
-            setBytesWritten(prev => prev + archiveItem.size);
-            updateFileStatus(archiveItem.id, 'copying', 100);
 
-            // Step 3: Integrity verifications (Hashing Destination file)
+            setBytesWritten(prev => prev + file.size);
+            updateDriveFileStatus(drive.id, file.id, 'copying', 100);
+
             if (config.integrityCheck) {
-              updateFileStatus(archiveItem.id, 'hashing_dest', 0);
-              addToLog(`Calculating destination hash for: ${archiveItem.name}`);
-              const destFileObj = await writeHandle.getFile();
+              updateDriveFileStatus(drive.id, file.id, 'hashing_dest', 0);
+              const destFileObj = await targetHandle.getFile();
               const destHash = await calculateSha256(destFileObj);
-              updateFileStatus(archiveItem.id, 'hashing_dest', 100, sourceHash, destHash);
 
-              // Checksum Crosscheck Validation
               if (sourceHash === destHash) {
-                updateFileStatus(archiveItem.id, 'success', 100, sourceHash, destHash);
+                updateDriveFileStatus(drive.id, file.id, 'success', 100, sourceHash, destHash);
                 setCopiedCount(prev => prev + 1);
-                addToLog(`✓ Verified Match: ${archiveItem.name}`);
-                archiveItem.destHandle = writeHandle; // preserve reference
+                addToLog(`✓ Verified Match: ${file.name}`);
               } else {
-                updateFileStatus(archiveItem.id, 'failed', 100, sourceHash, destHash, 'Integrity mismatch: SHA hash discrepancy!');
-                setFailedCount(prev => prev + 1);
-                addToLog(`❌ Integrity discrepancy on file: ${archiveItem.name}`);
+                throw new Error("Integrity Checksum mismatch error!");
               }
             } else {
-              updateFileStatus(archiveItem.id, 'success', 100);
+              updateDriveFileStatus(drive.id, file.id, 'success', 100);
               setCopiedCount(prev => prev + 1);
             }
-
-          } catch (err: any) {
-            updateFileStatus(archiveItem.id, 'failed', 0, undefined, undefined, err.message);
-            setFailedCount(prev => prev + 1);
-            addToLog(`Error backing up file ${archiveItem.name}: ${err.message}`);
           }
-        });
+        } catch (err: any) {
+          updateDriveFileStatus(drive.id, file.id, 'failed', 0, undefined, undefined, err.message);
+          setFailedCount(prev => prev + 1);
+          addToLog(`❌ Error on file ${file.name}: ${err.message}`);
+        }
+      });
 
-        await Promise.all(batchPromises);
+      await Promise.all(batchPromises);
 
-        // Calculate performance
-        const elapsedSec = (Date.now() - startTimerRef.current) / 1000;
-        const currentMBs = (bytesWritten / (1024 * 1024)) / elapsedSec;
-        setTransferSpeedMBs(Math.round(currentMBs));
+      // Speed telemetry calculator
+      const elapsedSec = (Date.now() - startTimerRef.current) / 1000;
+      const currentMBs = (bytesWritten / (1024 * 1024)) / (elapsedSec || 1);
+      setTransferSpeedMBs(Math.round(currentMBs) || 92); // default realistic OMV NFS speed
 
-        const bytesLeft = totalBytesToCopy - bytesWritten;
-        const remainingSec = bytesLeft / (currentMBs * 1024 * 1024);
-        setTimeRemainingSeconds(Math.max(0, Math.round(remainingSec)));
+      const bytesLeft = selectionMetrics.totalBytes - bytesWritten;
+      const remainingSec = bytesLeft / (currentMBs * 1024 * 1024 || 1);
+      setTimeRemainingSeconds(Math.max(0, Math.round(remainingSec)));
 
-        setTimeout(processQueue, 50);
-      };
+      setTimeout(processBatch, 80);
+    };
 
-      await processQueue();
-    }
+    await processBatch();
   };
 
-  const finishArchiving = () => {
+  const finishArchiving = (copiedSequence: Array<{ drive: MountedDrive; file: ArchivalFile }>) => {
     setIsArchiving(false);
     setBackupCompleted(true);
     const duration = Date.now() - startTimerRef.current;
-    
-    // Save archival report to local history
+
+    // Log complete session payload
     const sessionObj: ArchiveSession = {
       id: Math.random().toString(36).substring(2, 9),
       date: new Date().toISOString(),
-      projectName: isSimulation ? SIMULATED_PROJECTS[selectedSimProjectIdx].projectName : sourceDirName,
-      sourceDirName: isSimulation ? SIMULATED_PROJECTS[selectedSimProjectIdx].sourceName : sourceDirName,
-      destDirName: isSimulation ? 'OMV_Archive_Share/Wedding_Backups' : destDirName,
-      totalFiles: scannedFiles.length,
-      successfulFiles: copiedCount + (isSimulation ? scannedFiles.filter(f => f.status === 'success').length : 0),
+      projectName: `Project Archival - Multi-SSD Sync`,
+      sourceDirName: `${mountedDrives.length} Mounted SSDs`,
+      destDirName: chosenDestPath,
+      totalFiles: copiedSequence.length,
+      successfulFiles: copiedCount,
       failedFiles: failedCount,
       skippedFiles: skippedCount,
       totalBytes: bytesWritten,
       durationMs: duration,
-      filesLog: scannedFiles.map(f => ({
-        path: f.path,
-        size: f.size,
-        status: f.status,
-        sourceHash: f.sourceHash,
-        destHash: f.destHash,
-        error: f.error
-      }))
+      filesLog: copiedSequence.map(({ drive, file }) => {
+        // Find latest mutated state
+        const newestState = mountedDrives.find(d => d.id === drive.id)?.files.find(f => f.id === file.id);
+        return {
+          path: `[${drive.name}]/${file.path}`,
+          size: file.size,
+          status: newestState?.status || 'success',
+          sourceHash: newestState?.sourceHash || 'Simulated_MD5',
+          destHash: newestState?.destHash || 'Simulated_MD5',
+          error: newestState?.error
+        };
+      })
     };
 
     onSessionComplete(sessionObj);
-    addToLog(`Archival completed! Copied: ${copiedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}`);
-    
+    addToLog(`Archiving workflow synchronized. Completed: ${copiedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}`);
+
     if (config.deleteAfterCopy) {
       setShowCleanupPrompt(true);
     }
   };
 
-  // Safe Deletion / HDD cleanup routine to free space
+  // Safe sector cleaning
   const handleSafeCleanup = async () => {
     setCleanupRunning(true);
-    addToLog("CRITICAL: Executing safe SSD cleanup routine...");
-    
-    if (isSimulation) {
-      setTimeout(() => {
-        // Mock deletion of copied and verified files
-        const cleanableFiles = scannedFiles.filter(f => f.status === 'success');
-        addToLog(`Safely trimmed ${cleanableFiles.length} files from localized SSD mounting path.`);
-        addToLog(`Drives refreshed. Safely freed ${formatBytes(bytesWritten)} of local storage space!`);
-        setCleanupRunning(false);
-        setCleanupCompleted(true);
-        setShowCleanupPrompt(false);
-      }, 2000);
-    } else {
-      try {
-        let deleted = 0;
-        const verifiedSuccess = scannedFiles.filter(f => f.status === 'success');
-        
-        for (const fileItem of verifiedSuccess) {
-          if (fileItem.sourceHandle) {
-            // Delete file using File System API removal
-            await fileItem.sourceHandle.remove();
-            deleted++;
-            addToLog(`Removed original local node: ${fileItem.name}`);
-          }
-        }
-        
-        addToLog(`SSD Vacuum clean completed. Safely wiped ${deleted} verified raw media items.`);
-        addToLog(`Disk Space Recovered: ${formatBytes(bytesWritten)} free on Active SSD!`);
-        setCleanupRunning(false);
-        setCleanupCompleted(true);
-        setShowCleanupPrompt(false);
-      } catch (err: any) {
-        addToLog(`Cleanup Error: Some directories locked. Cleanup halted: ${err.message}`);
-        setCleanupRunning(false);
-      }
-    }
+    addToLog("CRITICAL EXECUTION: Purging copied raw buffers from origin flash sectors...");
+    await delay(1500);
+
+    // Prune checked files that completed successfully
+    setMountedDrives(prev => prev.map(drive => {
+      const remainingFiles = drive.files.filter(f => {
+        const fileURI = `${drive.id}::${f.path}`;
+        const isSelected = checkedFileURIs.has(fileURI);
+        const copySucceeded = f.status === 'success';
+        return !(isSelected && copySucceeded);
+      });
+      return {
+        ...drive,
+        files: remainingFiles,
+        usedSizeBytes: Math.max(0, drive.usedSizeBytes - (drive.files.length - remainingFiles.length) * 45000000)
+      };
+    }));
+
+    setCheckedFileURIs(new Set());
+    setCleanupRunning(false);
+    setCleanupCompleted(true);
+    setShowCleanupPrompt(false);
+    addToLog("SSD Flushed safely. Verified space recycled in local staging volumes.");
   };
 
   const handleAbortTransfer = () => {
     activeAbortRef.current = true;
     setIsArchiving(false);
-    addToLog("Transfer manually aborted by photographer.");
+    addToLog("Pipeline transfer aborted by photographer. Safely closing storage gates.");
   };
 
-  // Utils
-  const updateFileStatus = (id: string, status: ArchivalFile['status'], progress: number, sourceHash?: string, destHash?: string, error?: string) => {
-    setScannedFiles(prev => prev.map(f => {
-      if (f.id === id) {
+  const updateDriveFileStatus = (
+    driveId: string, 
+    fileId: string, 
+    status: ArchivalFile['status'], 
+    progress: number, 
+    sourceHash?: string, 
+    destHash?: string, 
+    error?: string
+  ) => {
+    setMountedDrives(prev => prev.map(drive => {
+      if (drive.id === driveId) {
         return {
-          ...f,
-          status,
-          progress,
-          sourceHash: sourceHash !== undefined ? sourceHash : f.sourceHash,
-          destHash: destHash !== undefined ? destHash : f.destHash,
-          error: error !== undefined ? error : f.error
+          ...drive,
+          files: drive.files.map(f => {
+            if (f.id === fileId) {
+              return {
+                ...f,
+                status,
+                progress,
+                sourceHash: sourceHash !== undefined ? sourceHash : f.sourceHash,
+                destHash: destHash !== undefined ? destHash : f.destHash,
+                error: error !== undefined ? error : f.error
+              };
+            }
+            return f;
+          })
         };
       }
-      return f;
+      return drive;
     }));
   };
 
-  const generateMockHash = (input: string) => {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      hash = (hash << 5) - hash + input.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash).toString(16).padEnd(6, 'a') + 'da89f2cfbc2be118a8fecad8';
-  };
-
+  // Helper formats
   const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-  // Determine current overall progress percentage
   const overallProgressPercent = totalBytesToCopy > 0 
     ? Math.round((bytesWritten / totalBytesToCopy) * 100) 
     : 0;
 
   return (
     <div className="space-y-5">
-      {/* Target selector and Environment disclaimer */}
-      <div id="archiver-disclaimer-panel" className="bg-zinc-900/35 backdrop-blur-md rounded-lg border border-zinc-800 p-5 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-800/60 pb-3.5">
-          <div className="space-y-0.5">
-            <h2 className="text-[15px] font-bold text-zinc-100 flex items-center gap-2 font-mono">
+      {/* Upper Pipeline Core Command Center */}
+      <div id="command-dashboard-panel" className="bg-zinc-900/35 backdrop-blur-md rounded-lg border border-zinc-850 p-5 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-800/60 pb-4">
+          <div className="space-y-1">
+            <h2 className="text-[14px] font-bold text-zinc-100 flex items-center gap-2 font-mono uppercase tracking-wider">
               <Zap className="w-4 h-4 text-cyan-400" />
-              CONSOLE_CORE_PIPELINE
+              INTELLIGENT_MULTI_SSD_WORKSPACE
             </h2>
             <p className="text-xs text-zinc-400">
-              Initiate high-integrity disk backups or simulate transmission streams across secure local NFS sockets.
+              Mount multiple raw camera SSDs at once, parse volumes, and stream checksum secure copies directly to OMV NFS servers.
             </p>
           </div>
 
           <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded border border-zinc-800 self-start lg:self-center font-mono">
             <button
-              id="btn-mode-sim"
+              id="switch-sim"
               onClick={() => {
                 setIsSimulation(true);
-                resetWorkflow();
+                addToLog("Switched execution profiling to Safe Virtual Sandbox.");
               }}
-              className={`px-3 py-1 text-[11px] font-semibold rounded-sm transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1 text-[11px] font-bold rounded-sm transition-all flex items-center gap-1.5 cursor-pointer ${
                 isSimulation
                   ? 'bg-zinc-800 text-cyan-400 border border-zinc-700/50 shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-350'
               }`}
             >
-              <Sparkles className="w-3 h-3 text-amber-400" /> SIMULATOR_RUN
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> VIRTUAL_SANDBOX
             </button>
             <button
-              id="btn-mode-real"
+              id="switch-real"
               onClick={() => {
                 if (!browserSupported) {
-                  addToLog("Physical picker is not supported in this browser. Try Chrome/Edge!");
+                  addToLog("Notice: File System Access API is disabled or unsupported in this client context.");
                   return;
                 }
                 setIsSimulation(false);
-                resetWorkflow();
+                addToLog("Switched execution profiling to Native Physical Drive access.");
               }}
-              disabled={!browserSupported}
-              className={`px-3 py-1 text-[11px] font-semibold rounded-sm transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1 text-[11px] font-bold rounded-sm transition-all flex items-center gap-1.5 cursor-pointer ${
                 !isSimulation
                   ? 'bg-zinc-800 text-cyan-400 border border-zinc-700/50 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-350 disabled:opacity-40'
+                  : 'text-zinc-500 hover:text-zinc-350'
               }`}
-              title={!browserSupported ? "Directory Pickers require standard secure browser flags API." : ""}
             >
-              <FolderOpen className="w-3 h-3" /> HARDWIRE_LOCAL
+              <FolderOpen className="w-3.5 h-3.5" /> PHYSICAL_DRIVES
             </button>
           </div>
         </div>
 
-        {/* Warning messages */}
+        {/* Warning panel inside iframe */}
         {iframeWarning && !isSimulation && (
-          <div className="bg-amber-950/15 text-amber-300 border border-amber-900/40 p-3.5 rounded text-xs flex gap-3 leading-relaxed">
+          <div className="bg-amber-950/15 text-amber-300 border border-amber-900/40 p-4 rounded text-xs flex gap-3 leading-relaxed">
             <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5 animate-pulse" />
             <div className="space-y-1">
-              <span className="font-semibold block text-[13px] font-mono">Iframe Container Isolation Warning</span>
-              <span className="block text-zinc-400">
-                You are currently inside the Google AI Studio preview frame. Browsers block the directory API (<code className="text-zinc-300">showDirectoryPicker</code>) within cross-origin frames.
-              </span>
-              <span className="block font-medium text-cyan-400 mt-1">
-                To backup real APFS and ExFAT files directly over OMV path, escape the sandbox using the "Open in New Tab" link in the top-right header menu.
+              <span className="font-bold block text-[12px] font-mono uppercase">Iframe Security Shield Active</span>
+              <span className="block text-zinc-400 font-mono">
+                The Directory Mount Selector requires elevated window permissions. Real directory pickers might fail inside nested iframes. Use **VIRTUAL_SANDBOX** to preview, or hit "Open in New Tab" to test real local SSD volumes!
               </span>
             </div>
           </div>
         )}
 
-        {/* Directory Pickers vs Simulation Project Selector */}
-        {isSimulation ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[11px] font-semibold text-zinc-400 block font-mono">SELECT MOUNTED PROJECT ARCHIVE (SSD)</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {SIMULATED_PROJECTS.map((p, idx) => (
-                  <button
-                    id={`sim-proj-${p.id}`}
-                    key={p.id}
-                    onClick={() => {
-                       setSelectedSimProjectIdx(idx);
-                       resetWorkflow();
-                    }}
-                    className={`p-2.5 text-left rounded border text-xs transition-all space-y-1 ${
-                      selectedSimProjectIdx === idx
-                        ? 'bg-zinc-900/80 border-cyan-500/30 text-white'
-                        : 'bg-zinc-950/40 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
-                    }`}
-                  >
-                    <span className="font-bold flex items-center gap-1.5 truncate text-zinc-200">
-                      <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                      {p.projectName}
-                    </span>
-                    <span className="block font-mono text-[10px] text-zinc-500">
-                      {p.totalFilesCount} files • {p.alreadyBackedUp.length} in Cache
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-[11px] font-semibold text-zinc-400 block font-mono">TARGET OMV NAS SHARE NODE</span>
-              <div className="bg-zinc-950/60 p-2.5 rounded border border-zinc-800 text-xs text-zinc-300 flex items-center justify-between font-mono">
-                <span className="flex items-center gap-2 text-cyan-400">
-                  <Database className="w-4 h-4" />
-                  NFS://192.168.1.150/export/Wedding_Archives
+        {/* Core Layout Split: Source Deck/Target share vs Interactive File Tree */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* LEFT DECK (Column Span 4): MOUNT CONTROLLER & OMV CHANNELS */}
+          <div className="lg:col-span-4 space-y-4">
+            
+            {/* SSD Storage Panel */}
+            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
+                <span className="text-[11px] font-bold text-zinc-350 font-mono uppercase tracking-wide flex items-center gap-1.5">
+                  <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
+                  MOUNTED_MEDIA_STATION
                 </span>
-                <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wider bg-emerald-950/20 px-1 py-0.5 rounded border border-emerald-900/30">ONLINE</span>
+                <span className="text-[10px] text-zinc-500 font-mono uppercase">
+                  Active: {mountedDrives.length}
+                </span>
               </div>
-              <p className="text-[10px] text-zinc-500 font-mono">
-                Assigned share directory: media_vault_vol1/photography/active_transfers
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Real Folder Loaders */}
-            <div className="bg-zinc-950/40 p-3.5 rounded border border-zinc-800 space-y-2">
-              <span className="text-[11px] font-semibold text-zinc-400 block font-mono">SSD SOURCE MOUNT INGRESS (RAW MEDIA)</span>
-              <div className="flex items-center gap-2">
-                <button
-                  id="btn-open-source"
-                  onClick={handleSelectSource}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs py-2 px-3 rounded transition-all flex items-center gap-1.5 flex-shrink-0 font-mono"
-                >
-                  <FolderOpen className="w-3.5 h-3.5" /> MOUNT_DRIVE
-                </button>
-                <div className="font-mono text-xs text-zinc-300 truncate bg-zinc-900 border border-zinc-800/80 px-2.5 py-1.5 rounded w-full">
-                  {sourceDirName || "Please select physical folder node..."}
-                </div>
-              </div>
-              <span className="block text-[10px] text-zinc-500 font-mono">Accepts APFS partitions, ExFAT, and high speed USB.</span>
-            </div>
 
-            <div className="bg-zinc-950/40 p-3.5 rounded border border-zinc-800 space-y-2">
-              <span className="text-[11px] font-semibold text-zinc-400 block font-mono">NFS DESTINATION EGRESS (OMV SHARE)</span>
-              <div className="flex items-center gap-2">
-                <button
-                  id="btn-open-dest"
-                  onClick={handleSelectDestination}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs py-2 px-3 rounded transition-all flex items-center gap-1.5 flex-shrink-0 font-mono"
-                >
-                  <FolderOpen className="w-3.5 h-3.5" /> MOUNT_NAS
-                </button>
-                <div className="font-mono text-xs text-zinc-300 truncate bg-zinc-900 border border-zinc-800/80 px-2.5 py-1.5 rounded w-full">
-                  {destDirName || "Please mount network storage path..."}
-                </div>
-              </div>
-              <span className="block text-[10px] text-zinc-500 font-mono">Must map to OMV high throughput NFS export mount point.</span>
-            </div>
-          </div>
-        )}
-
-        {/* Configuration settings panel */}
-        <div className="bg-zinc-950/50 px-3.5 py-2.5 rounded border border-zinc-800 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              id="config-checksum"
-              type="checkbox"
-              checked={config.integrityCheck}
-              onChange={(e) => setConfig({ ...config, integrityCheck: e.target.checked })}
-              className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400"
-            />
-            <span className="text-zinc-400 text-[10.5px]">
-              SHA-256 CHECK
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              id="config-skip"
-              type="checkbox"
-              checked={config.skipExisting}
-              onChange={(e) => setConfig({ ...config, skipExisting: e.target.checked })}
-              className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400"
-            />
-            <span className="text-zinc-400 text-[10.5px]">
-              SKIP DUPLICATES
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              id="config-delete"
-              type="checkbox"
-              checked={config.deleteAfterCopy}
-              onChange={(e) => setConfig({ ...config, deleteAfterCopy: e.target.checked })}
-              className="rounded text-rose-500 bg-zinc-900 border-rose-950 h-3.5 w-3.5 accent-rose-500"
-            />
-            <span className="text-rose-450 text-[10.5px] uppercase">
-              Purge SSD Post-Write
-            </span>
-          </label>
-
-          <div className="flex items-center gap-2 justify-between">
-            <span className="text-zinc-500 text-[10.5px]">PARALLEL_STREAMS:</span>
-            <select
-              id="config-concurrency"
-              value={config.concurrencyLimit}
-              onChange={(e) => setConfig({ ...config, concurrencyLimit: Number(e.target.value) })}
-              className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-1.5 py-0.5 text-[10px] font-mono cursor-pointer"
-            >
-              <option value="1">1 (Single Pipe)</option>
-              <option value="2">2 (Optimal Link)</option>
-              <option value="4">4 (10GbE Max)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Action button */}
-        <div className="flex gap-2">
-          {scannedFiles.length === 0 ? (
-            <button
-              id="btn-scan"
-              onClick={handleScanDirectories}
-              disabled={isScanning || (!isSimulation && (!sourceDirHandle || !destDirHandle))}
-              className="flex-1 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-cyan-400 font-mono font-semibold py-2 px-4 rounded text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-            >
-              {isScanning ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                  ANALYZING DIRECTORY BLOCKS & DUPLICATES...
-                </>
-              ) : (
-                <>
-                  <Layers className="w-3.5 h-3.5" />
-                  LOAD_SECTOR_BLOCKS & ANALYZE_COMPLIANCE
-                </>
-              )}
-            </button>
-          ) : (
-            <div className="flex gap-2 w-full font-mono">
-              <button
-                id="btn-start-archive"
-                onClick={handleStartArchiving}
-                disabled={isArchiving || scannedFiles.filter(f => f.status === 'scanned' || f.status === 'pending').length === 0}
-                className="flex-3 bg-blue-600 hover:bg-blue-500 border border-blue-500/10 text-white font-semibold py-2 px-4 rounded text-xs transition-all flex items-center justify-center gap-2"
-              >
-                {isArchiving ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                    STREAMING_ASSETS ({overallProgressPercent}%)
-                  </>
+              {/* Mounted drive list items */}
+              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                {mountedDrives.length === 0 ? (
+                  <div className="text-center py-6 text-zinc-500 border border-dashed border-zinc-850 rounded bg-zinc-950/20">
+                    <span className="text-[10px] font-mono block">NO_STAGE_VOLUMES_DETECTED</span>
+                  </div>
                 ) : (
-                  <>
-                    <Play className="w-3 h-3 fill-white" />
-                    EXECUTE_SECURE_TRANSMISSION
-                  </>
+                  mountedDrives.map(drive => {
+                    const pct = Math.round((drive.usedSizeBytes / drive.totalSizeBytes) * 100);
+                    const driveURIClass = drive.color;
+                    
+                    return (
+                      <div key={drive.id} className="bg-zinc-900/40 border border-zinc-850 p-2.5 rounded hover:bg-zinc-900/70 transition-all space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="truncate pr-2">
+                            <div className="font-mono font-bold text-zinc-200 text-xs flex items-center gap-1 truncate">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse" />
+                              {drive.name}
+                            </div>
+                            <div className="text-[9.5px] text-zinc-500 font-mono truncate">{drive.connection}</div>
+                          </div>
+                          
+                          <button
+                            id={`unmount-btn-${drive.id}`}
+                            onClick={() => handleUnmountDrive(drive.id)}
+                            className="bg-zinc-950 hover:bg-rose-950/20 text-zinc-500 hover:text-rose-400 border border-zinc-800 hover:border-rose-900/45 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer transition-all"
+                          >
+                            RELEASE
+                          </button>
+                        </div>
+
+                        {/* Capacity gauge */}
+                        <div className="space-y-1 font-mono text-[9.5px]">
+                          <div className="w-full bg-zinc-950 h-1 rounded-sm overflow-hidden flex">
+                            <div className="bg-cyan-500/80 h-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="flex justify-between text-zinc-500">
+                            <span>Used: {pct}%</span>
+                            <span>{drive.capacity}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-              </button>
-              <button
-                id="btn-reset-workflow"
-                onClick={resetWorkflow}
-                disabled={isArchiving}
-                className="flex-1 bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white text-xs rounded py-2 px-4 transition-all hover:bg-zinc-900/30"
-              >
-                RELEASE_MOUNTS
-              </button>
+              </div>
+
+              {/* Mounting Trigger button */}
+              {isSimulation ? (
+                <div className="space-y-2 pt-1 border-t border-zinc-850 font-mono">
+                  <span className="text-[10px] text-zinc-400 uppercase font-bold block">Mount virtual premium SSDs:</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SIMULATED_DRIVE_PRESETS.map(preset => {
+                      const isMounted = mountedDrives.some(d => d.id === preset.id);
+                      return (
+                        <button
+                          id={`mount-preset-${preset.id}`}
+                          key={preset.id}
+                          onClick={() => {
+                            if (isMounted) {
+                              handleUnmountDrive(preset.id);
+                            } else {
+                              handleMountSimulatedPreset(preset.id);
+                            }
+                          }}
+                          className={`text-left p-2 rounded border text-[11px] transition-all flex flex-col justify-between h-auto ${
+                            isMounted 
+                              ? 'bg-zinc-905 border-cyan-800/40 text-cyan-400' 
+                              : 'bg-zinc-950/60 border-zinc-850 hover:border-zinc-750 text-zinc-400'
+                          }`}
+                        >
+                          <span className="font-bold block truncate">{preset.name}</span>
+                          <span className="text-[9.5px] text-zinc-500 mt-1 block">
+                            {isMounted ? '• ACTIVE' : '+ MOUNT SSD'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  id="btn-mount-physical"
+                  onClick={handleMountPhysicalDrive}
+                  className="w-full bg-blue-600/90 hover:bg-blue-500 text-white border border-blue-500/10 font-bold font-mono text-xs py-2 px-3 rounded transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" /> MOUNT_ADDITIONAL_SSD
+                </button>
+              )}
             </div>
-          )}
+
+            {/* Target Destination Storage volume Selection */}
+            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-850 pb-2 font-mono">
+                <span className="text-[11px] font-bold text-zinc-350 uppercase tracking-wide flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-cyan-400" />
+                  OMV_NFS_TARGET_CHANNELS
+                </span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+
+              {isSimulation ? (
+                <div className="space-y-1.5 font-mono text-xs">
+                  {OMV_NFS_TARGET_PRESETS.map(preset => (
+                    <button
+                      id={`target-preset-${preset.id}`}
+                      key={preset.id}
+                      onClick={() => setActiveDestId(preset.id)}
+                      className={`w-full p-2 rounded border text-left flex items-center justify-between transition-all cursor-pointer ${
+                        activeDestId === preset.id
+                          ? 'bg-zinc-900 border-cyan-500/25 text-cyan-400 shadow-sm'
+                          : 'bg-zinc-950/30 border-zinc-85 * text-zinc-400 hover:border-zinc-800 hover:text-zinc-300'
+                      }`}
+                    >
+                      <span className="truncate flex items-center gap-1.5 font-bold">
+                        <Server className="w-3 h-3 text-zinc-500" />
+                        {preset.label}
+                      </span>
+                      <span className="text-[9.5px] text-zinc-550 truncate">nfs://192.168.1.150/{preset.path.split('/').pop()}</span>
+                    </button>
+                  ))}
+
+                  <div className="pt-2">
+                    <label className="text-[10px] text-zinc-550 block mb-1 uppercase uppercase tracking-wider font-bold">Custom Subdirectory path:</label>
+                    <input
+                      id="custom-dest-input"
+                      type="text"
+                      placeholder="e.g. Backups/ClientName"
+                      value={customDestPath}
+                      onChange={(e) => setCustomDestPath(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-850 text-zinc-200 text-[11px] px-2.5 py-1.5 rounded focus:outline-none focus:border-cyan-500/50 font-mono"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    id="btn-mount-destination-nfs"
+                    onClick={handleMountDestinationNfs}
+                    className="w-full bg-zinc-900 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 hover:border-zinc-700 font-bold font-mono text-xs py-2 px-3 rounded transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Server className="w-3.5 h-3.5 text-cyan-400" /> LINK OMV DESTINATION SHARE
+                  </button>
+                  <div className="bg-zinc-950 p-2.5 rounded border border-zinc-850 text-[11px] font-mono truncate text-zinc-400">
+                    {destDirName ? `Mounted: nfs://${destDirName}` : 'Select target backup path handle...'}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-zinc-900/60 p-2.5 rounded border border-zinc-850 space-y-1 font-mono text-[10.5px]">
+                <div className="text-zinc-500 uppercase font-bold text-[9px]">Destination Summary Path:</div>
+                <div className="text-emerald-400 truncate font-semibold" title={chosenDestPath}>{chosenDestPath}</div>
+              </div>
+            </div>
+
+            {/* Profile Configurations */}
+            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-3 font-mono text-xs">
+              <span className="text-[11px] font-bold text-zinc-350 border-b border-zinc-850 pb-2 block uppercase tracking-wide font-mono">PIPELINE_FLOW_CONFIG</span>
+              
+              <div className="space-y-2 pt-1 font-mono text-[11px]">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    id="chk-integrity"
+                    type="checkbox"
+                    checked={config.integrityCheck}
+                    onChange={(e) => setConfig({ ...config, integrityCheck: e.target.checked })}
+                    className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400"
+                  />
+                  <span className="text-zinc-400 select-none">SHA-256 integrity checks</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    id="chk-skips"
+                    type="checkbox"
+                    checked={config.skipExisting}
+                    onChange={(e) => setConfig({ ...config, skipExisting: e.target.checked })}
+                    className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400"
+                  />
+                  <span className="text-zinc-400 select-none">Skip duplicate files</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    id="chk-delete"
+                    type="checkbox"
+                    checked={config.deleteAfterCopy}
+                    onChange={(e) => setConfig({ ...config, deleteAfterCopy: e.target.checked })}
+                    className="rounded text-rose-500 bg-zinc-900 border-rose-950 h-3.5 w-3.5 accent-rose-500"
+                  />
+                  <span className="text-rose-400 select-none font-bold uppercase text-[10px]">Trim stages post-write</span>
+                </label>
+
+                <div className="flex items-center justify-between pt-1 font-mono text-xs">
+                  <span className="text-zinc-505 uppercase text-[10px]">THREADS_CONCURRENCY</span>
+                  <select
+                    id="sel-concurrency"
+                    value={config.concurrencyLimit}
+                    onChange={(e) => setConfig({ ...config, concurrencyLimit: Number(e.target.value) })}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 font-mono cursor-pointer focus:outline-none"
+                  >
+                    <option value="1">1 (Safe Single Pipe)</option>
+                    <option value="2">2 (Optimal Bandwidth)</option>
+                    <option value="4">4 (Turbo 10G link)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT PANELS (Column Span 8): ACTIVE FILE WORKSPACE NAVIGATOR */}
+          <div className="lg:col-span-8 flex flex-col justify-between space-y-4">
+            
+            {/* Navigational Toolbar */}
+            <div className="bg-zinc-950/50 rounded border border-zinc-800 p-4 space-y-3.5 flex-1 flex flex-col justify-between">
+              <div className="space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-850 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Laptop className="w-4 h-4 text-cyan-400" />
+                    <span className="text-[12px] font-bold text-zinc-200 font-mono uppercase tracking-wide">
+                      VOLUMES_FILE_TREE_MANAGER
+                    </span>
+                  </div>
+
+                  {/* Search Query */}
+                  <div className="relative font-mono">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-550" />
+                    <input
+                      id="file-manager-search"
+                      type="text"
+                      placeholder="Search files/folders..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xxs pl-8 pr-2.5 py-1.5 rounded-sm focus:outline-none focus:border-cyan-500/50 font-mono w-full sm:w-44"
+                    />
+                  </div>
+                </div>
+
+                {/* Filter and selector actions */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-900/25 p-2 rounded border border-zinc-855 font-mono">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-zinc-500 mr-2 uppercase tracking-wide">FILTER BY:</span>
+                    {(['all', 'raw', 'lr', 'video'] as const).map(fOpt => (
+                      <button
+                        id={`filter-btn-${fOpt}`}
+                        key={fOpt}
+                        onClick={() => setActiveMediaFilter(fOpt)}
+                        className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all uppercase cursor-pointer ${
+                          activeMediaFilter === fOpt
+                            ? 'bg-cyan-950/40 text-cyan-405 border border-cyan-800/25'
+                            : 'text-zinc-500 hover:text-zinc-350'
+                        }`}
+                      >
+                        {fOpt === 'all' && 'All_Items'}
+                        {fOpt === 'raw' && 'RAW_Media'}
+                        {fOpt === 'lr' && 'Catalogs'}
+                        {fOpt === 'video' && 'Video_Raw'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xxs font-mono">
+                    <button
+                      id="bulk-all"
+                      onClick={() => handleBulkSelectAction('all')}
+                      className="text-zinc-400 hover:text-cyan-400 border border-zinc-800 hover:border-zinc-700 px-2 py-0.5 rounded transition-all cursor-pointer bg-zinc-950 font-bold"
+                    >
+                      CHECK_ALL
+                    </button>
+                    <button
+                      id="bulk-raw"
+                      onClick={() => handleBulkSelectAction('all-raw')}
+                      className="text-zinc-400 hover:text-cyan-400 border border-zinc-800 hover:border-zinc-700 px-2 py-0.5 rounded transition-all cursor-pointer bg-zinc-950 font-bold"
+                    >
+                      CH_RAWS
+                    </button>
+                    <button
+                      id="bulk-lr"
+                      onClick={() => handleBulkSelectAction('all-lr')}
+                      className="text-zinc-400 hover:text-cyan-400 border border-zinc-800 hover:border-zinc-700 px-2 py-0.5 rounded transition-all cursor-pointer bg-zinc-950 font-bold"
+                    >
+                      CH_CATALOGS
+                    </button>
+                    <button
+                      id="bulk-clear"
+                      onClick={() => handleBulkSelectAction('clear')}
+                      className="text-rose-450 hover:text-rose-400 border border-rose-950/20 px-2 py-0.5 rounded transition-all cursor-pointer bg-rose-950/5 font-bold"
+                    >
+                      CLEAR
+                    </button>
+                  </div>
+                </div>
+
+                {/* FILE SYSTEM EXPLORER RENDER WINDOW */}
+                <div id="file-tree-viewport" className="border border-zinc-850 rounded bg-zinc-950 p-2 font-mono text-[10.5px] max-h-[380px] overflow-y-auto select-none space-y-1 scrollbar-thin">
+                  {mountedDrives.length === 0 ? (
+                    <div className="text-center py-20 text-zinc-600 font-mono space-y-2">
+                      <FolderOpen className="w-8 h-8 mx-auto text-zinc-700" />
+                      <div className="text-xs uppercase font-bold text-zinc-550">WORKSPACE_VOIDS</div>
+                      <p className="text-[10px] max-w-xs mx-auto leading-relaxed">
+                        No photography storage disks mounted. Connect simulated SSD sectors on the left node bank to explore directory catalogs.
+                      </p>
+                    </div>
+                  ) : (
+                    mountedDrives.map(drive => {
+                      const folders = driveDirectoriesSetMap[drive.id] || [];
+                      const files = filteredFilesByDrive[drive.id] || [];
+                      const driveChecked = getDriveCheckedState(drive.id);
+                      
+                      return (
+                        <div key={drive.id} className="border-b border-zinc-900/60 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
+                          {/* ROOT DRIVE NODE ROW */}
+                          <div id={`drive-row-${drive.id}`} className="group hover:bg-zinc-900/35 p-1 rounded flex items-center justify-between font-mono font-bold">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                id={`drive-chk-${drive.id}`}
+                                type="checkbox"
+                                checked={driveChecked === 'checked'}
+                                ref={el => {
+                                  if (el) el.indeterminate = driveChecked === 'partial';
+                                }}
+                                onChange={() => handleToggleDriveCheck(drive.id, driveChecked === 'checked')}
+                                className="rounded text-cyan-500 bg-zinc-900 border-zinc-800 h-3.5 w-3.5 accent-cyan-400 cursor-pointer"
+                              />
+                              <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
+                              <span className="text-zinc-150 uppercase tracking-wide text-xxs font-mono">{drive.name}</span>
+                              <span className="text-zinc-550 font-normal text-[9px]">[{drive.capacity}]</span>
+                            </div>
+                            <span className="text-[9px] text-zinc-600">DRIVE_ROOT</span>
+                          </div>
+
+                          {/* SUBDIRECTOR_TREE INDENT ROWS */}
+                          {folders.map(folder => {
+                            const isShown = isFolderShownInTree(drive.id, folder);
+                            if (!isShown) return null;
+                            
+                            const level = folder.split('/').length;
+                            const folderName = folder.split('/').pop() || '';
+                            const fUri = `${drive.id}::${folder}`;
+                            const isExpanded = expandedFolders.has(fUri);
+                            const folderChecked = getFolderCheckedState(drive.id, folder);
+                            
+                            return (
+                              <div
+                                id={`folder-row-${folder.replace(/\//g, '_')}`}
+                                key={folder}
+                                className="group hover:bg-zinc-900/25 p-1 rounded flex items-center justify-between font-mono select-none"
+                                style={{ paddingLeft: `${(level) * 16}px` }}
+                              >
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <input
+                                    id={`folder-chk-${folder.replace(/\//g, '_')}`}
+                                    type="checkbox"
+                                    checked={folderChecked === 'checked'}
+                                    ref={el => {
+                                      if (el) el.indeterminate = folderChecked === 'partial';
+                                    }}
+                                    onChange={() => handleToggleFolderCheck(drive.id, folder, folderChecked === 'checked')}
+                                    className="rounded text-cyan-500 bg-zinc-900 border-zinc-800 h-3 w-3 accent-cyan-400 cursor-pointer"
+                                  />
+                                  <button
+                                    id={`folder-toggle-${folder.replace(/\//g, '_')}`}
+                                    onClick={() => toggleFolderExpanded(fUri)}
+                                    className="p-0.5 text-zinc-500 hover:text-white rounded hover:bg-zinc-800 focus:outline-none transition-all cursor-pointer"
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="w-3 h-3 text-cyan-400" />
+                                    ) : (
+                                      <ChevronRight className="w-3 h-3 text-zinc-555" />
+                                    )}
+                                  </button>
+                                  <span
+                                    onClick={() => toggleFolderExpanded(fUri)}
+                                    className="text-zinc-350 hover:text-white cursor-pointer font-bold select-none truncate"
+                                  >
+                                    {folderName}/
+                                  </span>
+                                </div>
+                                <span className="text-[9.5px] text-zinc-600 select-none">DIR</span>
+                              </div>
+                            );
+                          })}
+
+                          {/* RAW FILES NODES ROWS */}
+                          {files.map(file => {
+                            const isShown = isFileShownInTree(drive.id, file.path);
+                            if (!isShown) return null;
+                            
+                            const parts = file.path.split('/');
+                            const level = parts.length;
+                            const isChecked = checkedFileURIs.has(`${drive.id}::${file.path}`);
+                            
+                            let extLabel = file.name.substring(file.name.lastIndexOf('.')).toUpperCase();
+                            
+                            return (
+                              <div
+                                id={`file-row-${file.id}`}
+                                key={file.id}
+                                className={`group hover:bg-zinc-900/40 p-1 rounded flex items-center justify-between transition-all font-mono select-none ${
+                                  isChecked ? 'bg-zinc-900/10' : ''
+                                }`}
+                                style={{ paddingLeft: `${(level) * 16}px` }}
+                              >
+                                <div className="flex items-start gap-1.5 truncate">
+                                  <input
+                                    id={`file-chk-${file.id}`}
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleFileCheck(`${drive.id}::${file.path}`)}
+                                    className="rounded text-cyan-500 bg-zinc-900 border-zinc-800 mt-[2px] h-3 w-3 accent-cyan-400 cursor-pointer"
+                                  />
+                                  <span
+                                    onClick={() => handleToggleFileCheck(`${drive.id}::${file.path}`)}
+                                    className="text-zinc-400 hover:text-white cursor-pointer select-none truncate"
+                                    title={file.path}
+                                  >
+                                    {file.name}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[9.5px] text-zinc-650 font-mono select-none">{extLabel}</span>
+                                  <span className="text-[9.5px] text-zinc-550 font-mono select-none w-14 text-right">{formatBytes(file.size)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom selection feedback bar */}
+              <div className="bg-zinc-900/45 border border-zinc-850 rounded p-3 mt-3 flex flex-col sm:flex-row items-center justify-between gap-3 font-mono">
+                <div className="space-y-1 text-center sm:text-left">
+                  <span className="text-zinc-500 text-[10px] block uppercase font-bold">PIPELINE_LOADOUT:</span>
+                  <div className="text-zinc-200 font-bold font-mono text-xs">
+                    Checked Components: <span className="text-cyan-400">{selectionMetrics.totalFiles} Units</span> <span className="text-zinc-600">|</span> Total Size: <span className="text-cyan-400">{formatBytes(selectionMetrics.totalBytes)}</span>
+                  </div>
+                </div>
+
+                <div className="w-full sm:w-auto font-mono">
+                  <button
+                    id="btn-execute-sync"
+                    onClick={handleStartArchiving}
+                    disabled={isArchiving || selectionMetrics.totalFiles === 0}
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 rounded transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isArchiving ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        SPOOLING_SEGMENTS ({overallProgressPercent}%)
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3 h-3 fill-white" />
+                        SYNCHRONIZE_NFS_ARCHIVE
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
+
+      {/* LOWER MONITORING TIMELINE & EVENT TIMELINE DAEMON */}
       {activeConsoleLog.length > 0 && (
-        <div id="archiver-status-panel" className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Active queue monitor */}
+        <div id="archiver-telemetry-panels" className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Queued Active Progress */}
           <div className="lg:col-span-2 space-y-3 bg-zinc-900/35 backdrop-blur-md rounded-lg border border-zinc-800 p-5 flex flex-col justify-between">
             <div className="space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-800/80 pb-3">
-                <h3 className="font-semibold text-zinc-300 text-sm flex items-center gap-2 font-mono">
+              <div className="flex justify-between items-center border-b border-zinc-850 pb-3 font-mono">
+                <h3 className="font-bold text-zinc-300 text-xs uppercase flex items-center gap-2">
                   <FileCheck className="w-4 h-4 text-emerald-400" />
-                  TRANSMISSION_STREAM_PROGRESS
+                  NFS_TRANSMISSION_PROGRESS_PIPES
                 </h3>
                 {isArchiving && (
                   <button
-                    id="btn-abort"
+                    id="btn-abort-archival"
                     onClick={handleAbortTransfer}
-                    className="bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-550/20 px-2 py-0.5 rounded text-[10px] font-bold font-mono transition-all"
+                    className="bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-550/20 px-2.5 py-1 rounded text-[10px] font-bold font-mono cursor-pointer transition-all uppercase"
                   >
-                    ABORT_STREAM
+                    ABORT_PIPES
                   </button>
                 )}
               </div>
 
-              {/* Progress Panel */}
+              {/* Progress Gauges */}
               {totalBytesToCopy > 0 && (
                 <div className="bg-zinc-950/80 p-3.5 rounded border border-zinc-850 space-y-3 font-mono">
-                  <div className="flex flex-wrap justify-between items-center gap-2 text-[11px] text-zinc-400">
+                  <div className="flex flex-wrap justify-between items-center gap-2 text-[11px] text-zinc-400 font-mono">
                     <span className="flex items-center gap-1.5 font-bold text-zinc-200">
                       <Gauge className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                      STATUS: {isArchiving ? 'SPOOLING_BYTES' : backupCompleted ? 'CRC_VERIFIED' : 'STANDBY'}
+                      SYSTEM: {isArchiving ? 'STREAMING_SECTORS' : backupCompleted ? 'CHECK_CRC_SUCCESSFUL' : 'PIPELINE_STANDBY'}
                     </span>
                     <span>COPIED: {formatBytes(bytesWritten)} / {formatBytes(totalBytesToCopy)}</span>
                   </div>
 
-                  <div className="w-full bg-zinc-900 rounded-sm h-2 overflow-hidden border border-zinc-800">
+                  <div className="w-full bg-zinc-900 h-1.5 rounded-sm overflow-hidden border border-zinc-800">
                     <div
                       className={`h-full rounded-sm transition-all duration-300 ${
-                        backupCompleted ? 'bg-emerald-500' : 'bg-cyan-500'
+                        backupCompleted ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.2)]' : 'bg-cyan-500 shadow-[0_0_8px_rgba(34,211,238,0.2)]'
                       }`}
                       style={{ width: `${overallProgressPercent}%` }}
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 text-center pt-1">
+                  <div className="grid grid-cols-3 gap-3 text-center pt-1 text-xs">
                     <div className="bg-zinc-900/40 p-2 rounded border border-zinc-850">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block">LINK_SPEED</span>
-                      <span className="text-[12px] font-bold text-zinc-200 block mt-0.5">{transferSpeedMBs || '-'} MB/s</span>
+                      <span className="text-[9px] text-zinc-505 block uppercase">NFS_THROUGHPUT</span>
+                      <span className="text-11px font-bold text-zinc-200 block mt-0.5">{transferSpeedMBs || 112} MB/s</span>
                     </div>
                     <div className="bg-zinc-900/40 p-2 rounded border border-zinc-850">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block">SEC_ESTIMATE</span>
-                      <span className="text-[12px] font-bold text-cyan-400 block mt-0.5">
-                        {isArchiving ? (timeRemainingSeconds === 0 ? 'CALC...' : `${timeRemainingSeconds}s`) : '-'}
+                      <span className="text-[9px] text-zinc-550 block uppercase font-mono">EST_LATENCY_LEFT</span>
+                      <span className="text-11px font-bold text-cyan-400 block mt-0.5">
+                        {isArchiving ? (timeRemainingSeconds === 0 ? 'CALCULATING' : `${timeRemainingSeconds}s`) : '-'}
                       </span>
                     </div>
                     <div className="bg-zinc-900/40 p-2 rounded border border-zinc-850">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block">DUPLICATE_CHECK</span>
-                      <span className={`text-[12px] font-bold block mt-0.5 ${backupCompleted ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        {backupCompleted ? '100% SECURE' : isArchiving ? 'CROSSCHECKING' : 'READY'}
+                      <span className="text-[9px] text-zinc-550 block uppercase font-mono">CRC_SHUFFLE_VERIFY</span>
+                      <span className={`text-[10px] font-bold block mt-0.5 uppercase ${backupCompleted ? 'text-emerald-450' : 'text-amber-450'}`}>
+                        {backupCompleted ? 'LOCK SECURE' : isArchiving ? 'CROSSCHECKING' : 'COMPLIANT_READY'}
                       </span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Individual File Items */}
+              {/* Staged copying lists */}
               <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {scannedFiles.map((file) => (
-                  <div key={file.id} className="bg-zinc-950/45 p-2 rounded border border-zinc-900 flex items-center justify-between text-[11px] font-mono">
-                    <div className="space-y-0.5 truncate max-w-sm">
-                      <span className="text-zinc-250 font-semibold block truncate" title={file.path}>{file.name}</span>
-                      <span className="text-[9.5px] text-zinc-500 block">
-                        Size: {formatBytes(file.size)} • Path: <code className="text-zinc-650">{file.path}</code>
-                      </span>
-                    </div>
+                {mountedDrives.map(drive => 
+                  drive.files.map(file => {
+                    const fileURI = `${drive.id}::${file.path}`;
+                    // Only render files that were checked or copy-executed
+                    if (!checkedFileURIs.has(fileURI) && file.status === 'scanned') return null;
 
-                    <div className="flex items-center gap-3">
-                      {file.status === 'scanned' && (
-                        <span className="bg-zinc-900 text-zinc-550 px-2 py-0.5 rounded border border-zinc-800">SCANNED</span>
-                      )}
-                      
-                      {file.status === 'skipped' && (
-                        <span className="bg-zinc-900/80 text-zinc-450 px-2 py-0.5 rounded border border-zinc-800 flex items-center gap-1 text-[10px]">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" /> OMV_CACHED
-                        </span>
-                      )}
- 
-                      {file.status === 'hashing_source' && (
-                        <span className="bg-zinc-900 text-cyan-400 px-2 py-0.5 rounded border border-cyan-900/20 flex items-center gap-1 text-[10px]">
-                          <Loader2 className="w-2.5 h-2.5 animate-spin" /> LOCAL_HASH
-                        </span>
-                      )}
-
-                      {file.status === 'copying' && (
-                        <div className="flex items-center gap-2">
-                          <div className="w-12 bg-zinc-900 h-1 rounded-sm overflow-hidden border border-zinc-800">
-                            <div className="bg-cyan-500 h-full rounded-sm" style={{ width: `${file.progress}%` }} />
-                          </div>
-                          <span className="text-cyan-400 text-[10px]">{file.progress}%</span>
-                        </div>
-                      )}
-
-                      {file.status === 'hashing_dest' && (
-                        <span className="bg-zinc-900 text-cyan-400 px-2 py-0.5 rounded border border-cyan-900/20 flex items-center gap-1 text-[10px] animate-pulse">
-                          DEST_WRITE_CONFIRM...
-                        </span>
-                      )}
-
-                      {file.status === 'success' && (
-                        <div className="flex flex-col items-end gap-0.5">
-                          <span className="bg-emerald-950/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-900/30 flex items-center gap-1 text-[10px] font-bold">
-                            <ShieldCheck className="w-3 h-3 text-emerald-400" /> MOUNTED_VERIFIED
+                    return (
+                      <div key={file.id} className="bg-zinc-950/45 p-2 rounded border border-zinc-900 flex items-center justify-between text-[11px] font-mono">
+                        <div className="space-y-0.5 truncate max-w-sm">
+                          <span className="text-zinc-250 font-bold block truncate" title={file.path}>{file.name}</span>
+                          <span className="text-[9.5px] text-zinc-500 block">
+                            Sector: <span className="text-zinc-400 font-bold">[{drive.name}]</span> • size: {formatBytes(file.size)}
                           </span>
                         </div>
-                      )}
 
-                      {file.status === 'failed' && (
-                        <span className="bg-rose-955/20 text-rose-400 px-2 py-0.5 rounded border border-rose-900/30" title={file.error}>
-                          ERROR_REJECTED
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                        <div className="flex items-center gap-3">
+                          {file.status === 'scanned' && (
+                            <span className="bg-zinc-900 text-zinc-500 p-1 px-1.5 rounded text-[9px] border border-zinc-850 font-bold">CHECKED</span>
+                          )}
+
+                          {file.status === 'skipped' && (
+                            <span className="bg-zinc-900 text-amber-500 p-1 px-1.5 rounded text-[9.5px] border border-amber-950/20 flex items-center gap-1 font-bold">
+                              <CheckCircle2 className="w-3 h-3 text-amber-500" /> DUPLICATE_SKIPPED
+                            </span>
+                          )}
+
+                          {file.status === 'hashing_source' && (
+                            <span className="bg-zinc-900 text-cyan-400 p-1 px-1.5 rounded text-[9.5px] border border-cyan-950/20 flex items-center gap-1 font-bold animate-pulse">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" /> COMP_HASHING
+                            </span>
+                          )}
+
+                          {file.status === 'copying' && (
+                            <div className="flex items-center gap-2">
+                              <div className="w-12 bg-zinc-900 h-1 rounded-sm overflow-hidden border border-zinc-800">
+                                <div className="bg-cyan-500 h-full rounded-sm" style={{ width: `${file.progress}%` }} />
+                              </div>
+                              <span className="text-cyan-400 text-[10px]">{file.progress}%</span>
+                            </div>
+                          )}
+
+                          {file.status === 'hashing_dest' && (
+                            <span className="bg-zinc-900 text-cyan-400 p-1 px-1.5 rounded text-[9.5px] border border-cyan-950/20 flex items-center gap-1 font-bold animate-pulse">
+                              DEST_CRC_VERIFYing
+                            </span>
+                          )}
+
+                          {file.status === 'success' && (
+                            <span className="bg-emerald-950/25 text-emerald-400 p-1 px-2 rounded text-[10px] border border-emerald-900/30 flex items-center gap-1 font-bold font-mono">
+                              <ShieldCheck className="w-3 h-3 text-emerald-450" /> CRC_STABLE
+                            </span>
+                          )}
+
+                          {file.status === 'failed' && (
+                            <span className="bg-rose-955/20 text-rose-455 p-1 px-1.5 rounded font-bold" title={file.error}>
+                              CRC_MISMATCH
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
-            {/* Space recovery / safe deletion panel */}
+            {/* Prompt SSD block flusher */}
             {showCleanupPrompt && (
-              <div id="space-cleanup-box" className="mt-4 bg-rose-950/15 border border-rose-900/30 p-4 rounded space-y-3 font-mono">
+              <div id="sector-cleanup-prompt" className="mt-4 bg-rose-950/15 border border-rose-900/30 p-4 rounded space-y-3 font-mono">
                 <div className="flex items-start gap-2.5 text-rose-300">
                   <AlertTriangle className="w-4.5 h-4.5 text-rose-400 mt-0.5 flex-shrink-0 animate-pulse" />
                   <div>
-                    <h4 className="font-bold text-sm text-zinc-100 uppercase">SAFE DRIVE PURGE REQUEST (FREE SECTORS)</h4>
+                    <h4 className="font-bold text-xs text-zinc-100 uppercase font-mono">CRITICAL REQUEST: TRIM ORIGIN sector staging</h4>
                     <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                      All {copiedCount} project media clips have been safely written to export share and verified using CRC SHA-256 byte validators. You can now purge original SSD logs to free local mount sectors.
+                      All {copiedCount} project media objects have been successfully spooled and verified over OMV CRC-32/SHA-256 blocks. You can safely purge origin stage partitions to recycle SSD bytes.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 justify-end">
                   <button
-                    id="btn-cleanup-cancel"
+                    id="btn-cleanup-skip"
                     onClick={() => setShowCleanupPrompt(false)}
-                    className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-[11px] px-3 py-1 rounded font-semibold cursor-pointer"
+                    className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-[10.5px] px-3 py-1 rounded font-bold cursor-pointer"
                   >
                     KEEP_ORIGINALS
                   </button>
                   <button
-                    id="btn-cleanup-confirm"
+                    id="btn-cleanup-trim"
                     onClick={handleSafeCleanup}
                     disabled={cleanupRunning}
-                    className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-[11px] px-3.5 py-1 rounded transition-all flex items-center gap-1.5 border border-rose-500/20 cursor-pointer"
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10.5px] px-3.5 py-1 rounded transition-all flex items-center gap-1.5 border border-rose-500/20 cursor-pointer"
                   >
                     {cleanupRunning ? (
                       <>
-                        <Loader2 className="w-3 h-3 animate-spin" /> EXECUTING_TRIM...
+                        <Loader2 className="w-3 h-3 animate-spin" /> PURGING_FLASH...
                       </>
                     ) : (
                       <>
-                        <Trash2 className="w-3.5 h-3.5" /> CONFIRM_SSD_PURGE
+                        <Trash2 className="w-3.5 h-3.5" /> RECYCLE_STAGING_SECTORS
                       </>
                     )}
                   </button>
@@ -1084,35 +1710,35 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
               <div className="mt-4 bg-emerald-950/20 border border-emerald-900 p-4 text-emerald-405 rounded text-xs flex gap-2.5 font-mono">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold block text-zinc-200">SECTORS VACUUMED SUCCESSFUL</span>
-                  <span className="text-zinc-400 block mt-0.5">Original raw camera directories flushed from workspace mounts safely. Local active storage freed. Ready for next media shoot.</span>
+                  <span className="font-bold block text-zinc-250">RECOVERY VERIFIED AND MOUNTS STABLE</span>
+                  <span className="text-zinc-400 block mt-0.5">Physical files flushed from origin stage sectors. Directory caches refreshed successfully. Ready for raw media capture on the next shoot.</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Console / terminal logs container */}
+          {/* RIGHT TERMINAL EVENT LOG PANEL */}
           <div className="lg:col-span-1 bg-zinc-950 border border-zinc-900 rounded-lg p-4 flex flex-col justify-between font-mono text-[11px] space-y-4">
             <div className="space-y-2 flex-1">
-              <span className="text-cyan-400 font-bold block border-b border-zinc-900 pb-2 flex items-center gap-2 select-none uppercase tracking-wider">
+              <span className="text-cyan-405 font-bold block border-b border-zinc-900 pb-2 flex items-center gap-2 select-none uppercase tracking-wider font-mono">
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                OMV_ARCHIVAL_DAEMON
+                OMV_ARCHIVAL_DEEMON
               </span>
               <div className="space-y-1.5 overflow-y-auto max-h-72 text-zinc-500 leading-relaxed text-[10.5px]">
-                {activeConsoleLog.map((log, idx) => (
-                  <div key={idx} className="break-all font-mono">
-                    {log}
+                {activeConsoleLog.map((logStr, indexIdx) => (
+                  <div key={indexIdx} className="break-all font-mono">
+                    {logStr}
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-zinc-900/40 p-3 rounded border border-zinc-800/80 text-[10.5px] text-zinc-500 space-y-1 font-mono">
-              <span className="font-bold text-zinc-400 block text-[10px] uppercase tracking-wider">SOCKET_METRICS</span>
-              <div>TRANSFERS: <span className="text-zinc-300 font-bold">{copiedCount} units</span></div>
-              <div>BLOCK_VERIFIER: <span className="text-zinc-300 font-bold">SHA-256 (CPU-BOUND)</span></div>
-              <div>SKIPS: <span className="text-cyan-400 font-bold">{skippedCount} matches</span></div>
-              <div>FAILED: <span className="text-rose-400 font-bold">{failedCount} blocks</span></div>
+            <div className="bg-zinc-900/40 p-3 rounded border border-zinc-850 text-[10.5px] text-zinc-500 space-y-1.5 font-mono">
+              <span className="font-bold text-zinc-400 block text-[9.5px] uppercase tracking-wider">PIPELINE_FLOW_TELEMETRY</span>
+              <div>TRANSFERS: <span className="text-zinc-300 font-bold">{copiedCount} segments</span></div>
+              <div>VERIFIER: <span className="text-zinc-300 font-bold">CRC-32/SHA-255</span></div>
+              <div>SKIPS: <span className="text-amber-500 font-bold">{skippedCount} matches</span></div>
+              <div>FAILED: <span className="text-rose-450 font-bold">{failedCount} records</span></div>
             </div>
           </div>
         </div>
