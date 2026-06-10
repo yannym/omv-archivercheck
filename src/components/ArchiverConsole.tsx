@@ -333,6 +333,22 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
     addToLog(`Released storage node: ${driveId}`);
   };
 
+  // Dismantle virtual simulation completely (Exit Sandbox Mode)
+  const handleExitSandboxMode = () => {
+    setMountedDrives(prev => prev.filter(d => d.type !== 'simulated'));
+    setCheckedFileURIs(prev => {
+      const next = new Set<string>();
+      prev.forEach(uri => {
+        if (uri.includes('::') && !uri.startsWith('drive_lexar::') && !uri.startsWith('drive_sandisk::') && !uri.startsWith('drive_lacie::') && !uri.startsWith('drive_tough::')) {
+          next.add(uri);
+        }
+      });
+      return next;
+    });
+    setIsSimulation(false);
+    addToLog("DECOMMISSIONED: Virtual Sandbox drives dismantled. Workspace shifted to direct Physical Drive stream.");
+  };
+
   // Physical directory picking helper (Mount real SSD folder)
   const handleMountPhysicalDrive = async () => {
     if (!(window as any).showDirectoryPicker) {
@@ -393,26 +409,35 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
 
       let alreadyMounted = false;
       setMountedDrives(prev => {
-        if (prev.some(d => d.name === handle.name)) {
+        // Automatically nix all simulated drives when a physical drive is loaded
+        const filtered = prev.filter(d => d.type !== 'simulated');
+        if (filtered.some(d => d.name === handle.name)) {
           alreadyMounted = true;
-          return prev;
+          return filtered;
         }
-        return [...prev, physicalDrive];
+        return [...filtered, physicalDrive];
       });
 
       if (alreadyMounted) {
-        addToLog(`Local directory '${handle.name}' is already mounted as a active storage sector.`);
+        addToLog(`Local directory '${handle.name}' is already mounted as an active storage sector.`);
         return;
       }
       
-      // Auto-check all items from the new physical drive
+      // Auto-check all items from the new physical drive and nix simulated checked files
       setCheckedFileURIs(prev => {
-        const next = new Set(prev);
+        const next = new Set<string>();
+        prev.forEach(uri => {
+          // Keep only real checks
+          if (uri.includes('::') && !uri.startsWith('drive_lexar::') && !uri.startsWith('drive_sandisk::') && !uri.startsWith('drive_lacie::') && !uri.startsWith('drive_tough::')) {
+            next.add(uri);
+          }
+        });
         fileList.forEach(f => next.add(`${driveId}::${f.path}`));
         return next;
       });
 
-      addToLog(`Mounted physical partition '${handle.name}' with ${fileList.length} items (${formatBytes(totalSize)}).`);
+      setIsSimulation(false);
+      addToLog(`Mounted physical partition '${handle.name}' with ${fileList.length} items (${formatBytes(totalSize)}). Sandbox drives nixed.`);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         addToLog(`Mounting aborted: ${err.message}`);
@@ -997,39 +1022,52 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
             </p>
           </div>
 
-          <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded border border-zinc-800 self-start lg:self-center font-mono">
-            <button
-              id="switch-sim"
-              onClick={() => {
-                setIsSimulation(true);
-                addToLog("Switched execution profiling to Safe Virtual Sandbox.");
-              }}
-              className={`px-3 py-1 text-[11px] font-bold rounded-sm transition-all flex items-center gap-1.5 cursor-pointer ${
-                isSimulation
-                  ? 'bg-zinc-800 text-cyan-400 border border-zinc-700/50 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-350'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> VIRTUAL_SANDBOX
-            </button>
-            <button
-              id="switch-real"
-              onClick={() => {
-                if (!browserSupported) {
-                  addToLog("Notice: File System Access API is disabled or unsupported in this client context.");
-                  return;
-                }
-                setIsSimulation(false);
-                addToLog("Switched execution profiling to Native Physical Drive access.");
-              }}
-              className={`px-3 py-1 text-[11px] font-bold rounded-sm transition-all flex items-center gap-1.5 cursor-pointer ${
-                !isSimulation
-                  ? 'bg-zinc-800 text-cyan-400 border border-zinc-700/50 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-350'
-              }`}
-            >
-              <FolderOpen className="w-3.5 h-3.5" /> PHYSICAL_DRIVES
-            </button>
+          <div className="flex items-center gap-2 flex-wrap self-start lg:self-center">
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded border border-zinc-800 font-mono">
+              <button
+                id="switch-sim"
+                onClick={() => {
+                  setIsSimulation(true);
+                  addToLog("Switched execution profiling to Safe Virtual Sandbox.");
+                }}
+                className={`px-3 py-1 text-[11px] font-bold rounded-sm transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSimulation
+                    ? 'bg-zinc-800 text-cyan-400 border border-zinc-700/50 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-350'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" /> VIRTUAL_SANDBOX
+              </button>
+              <button
+                id="switch-real"
+                onClick={() => {
+                  if (!browserSupported) {
+                    addToLog("Notice: File System Access API is disabled or unsupported in this client context.");
+                    return;
+                  }
+                  setIsSimulation(false);
+                  addToLog("Switched execution profiling to Native Physical Drive access.");
+                }}
+                className={`px-3 py-1 text-[11px] font-bold rounded-sm transition-all flex items-center gap-1.5 cursor-pointer ${
+                  !isSimulation
+                    ? 'bg-zinc-800 text-cyan-400 border border-zinc-700/50 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-350'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5" /> PHYSICAL_DRIVES
+              </button>
+            </div>
+
+            {mountedDrives.some(d => d.type === 'simulated') && (
+              <button
+                id="btn-dismiss-sandbox"
+                onClick={handleExitSandboxMode}
+                className="px-3 py-1.5 text-[11px] font-bold rounded border border-rose-900 bg-rose-950/35 hover:bg-rose-950/55 text-rose-400 cursor-pointer transition-all active:scale-95 font-mono shadow-[0_0_12px_rgba(244,63,94,0.1)] flex items-center gap-1.5"
+                title="Dismantle all simulated storage nodes and clear the staging deck."
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" /> EXIT_SANDBOX_MODE
+              </button>
+            )}
           </div>
         </div>
 
@@ -1052,7 +1090,7 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
           <div className="lg:col-span-4 space-y-4">
             
             {/* SSD Storage Panel */}
-            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-4">
+            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-4 shadow-sm">
               <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
                 <span className="text-[11px] font-bold text-zinc-350 font-mono uppercase tracking-wide flex items-center gap-1.5">
                   <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
@@ -1066,42 +1104,92 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
               {/* Mounted drive list items */}
               <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                 {mountedDrives.length === 0 ? (
-                  <div className="text-center py-6 text-zinc-500 border border-dashed border-zinc-850 rounded bg-zinc-950/20">
+                  <div className="text-center py-6 text-zinc-550 border border-dashed border-zinc-850 rounded bg-zinc-950/20">
                     <span className="text-[10px] font-mono block">NO_STAGE_VOLUMES_DETECTED</span>
                   </div>
                 ) : (
                   mountedDrives.map(drive => {
                     const pct = Math.round((drive.usedSizeBytes / drive.totalSizeBytes) * 100);
-                    const driveURIClass = drive.color;
                     
+                    // Capacity load visual classifications
+                    let barColor = 'bg-cyan-500';
+                    let borderColor = 'border-cyan-500/20';
+                    let badgeStyles = 'bg-cyan-950/40 text-cyan-400 border border-cyan-800/20';
+                    let spaceStatusLabel = 'HEALTHY_STORAGE';
+                    
+                    if (pct >= 80) {
+                      barColor = 'bg-rose-500';
+                      borderColor = 'border-rose-500/30 bg-rose-950/5';
+                      badgeStyles = 'bg-rose-955/20 text-rose-400 border border-rose-900/40';
+                      spaceStatusLabel = 'CRITICAL_FULL';
+                    } else if (pct >= 55) {
+                      barColor = 'bg-amber-500';
+                      borderColor = 'border-amber-500/20 bg-amber-950/5';
+                      badgeStyles = 'bg-amber-955/15 text-amber-500 border border-amber-950/30';
+                      spaceStatusLabel = 'MODERATE_LOAD';
+                    } else {
+                      barColor = 'bg-emerald-500';
+                      borderColor = 'border-emerald-500/20 bg-emerald-950/5';
+                      badgeStyles = 'bg-emerald-955/15 text-emerald-400 border border-emerald-900/30';
+                      spaceStatusLabel = 'AMPLE_ROOM';
+                    }
+
+                    const isSim = drive.type === 'simulated';
+
                     return (
-                      <div key={drive.id} className="bg-zinc-900/40 border border-zinc-850 p-2.5 rounded hover:bg-zinc-900/70 transition-all space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="truncate pr-2">
-                            <div className="font-mono font-bold text-zinc-200 text-xs flex items-center gap-1 truncate">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse" />
+                      <div 
+                        key={drive.id} 
+                        className={`p-3 rounded border transition-all duration-200 relative group/drive ${borderColor} space-y-2.5 hover:bg-zinc-900/30`}
+                      >
+                        {/* Interactive Tooltip on the entire Card */}
+                        <div className="absolute left-[102%] top-0 hidden group-hover/drive:block w-52 bg-zinc-950 border border-zinc-850 p-2.5 rounded shadow-2xl z-50 text-[10px] text-zinc-400 font-mono leading-relaxed pointer-events-none transition-all">
+                          <span className="text-zinc-200 font-bold block border-b border-zinc-850 pb-1 mb-1 font-mono text-[9px] uppercase tracking-wider">
+                            {isSim ? '⚡ VIRTUAL SSD PRESET' : '💿 NATIVE HARDWARE DISK'}
+                          </span>
+                          <div className="space-y-0.5 text-zinc-400">
+                            <p>Name: <span className="text-zinc-200">{drive.name}</span></p>
+                            <p>Sector: <span className="text-zinc-300 font-mono text-[9px]">{drive.id}</span></p>
+                            <p>Conn: <span className="text-zinc-300">{drive.connection}</span></p>
+                            <p className="mt-1.5 border-t border-zinc-850 pt-1 text-zinc-350">
+                              Staged capacity stands at {pct}% utilization. You have {formatBytes(drive.totalSizeBytes - drive.usedSizeBytes)} storage space left.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-1">
+                          <div className="truncate pr-1">
+                            <div className="font-mono font-bold text-zinc-200 text-xs flex items-center gap-1.5 truncate">
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse ${isSim ? 'bg-amber-400' : 'bg-emerald-400'}`} />
                               {drive.name}
                             </div>
-                            <div className="text-[9.5px] text-zinc-500 font-mono truncate">{drive.connection}</div>
+                            <div className="text-[9.5px] text-zinc-500 font-mono truncate mt-0.5">{drive.connection}</div>
                           </div>
                           
-                          <button
-                            id={`unmount-btn-${drive.id}`}
-                            onClick={() => handleUnmountDrive(drive.id)}
-                            className="bg-zinc-950 hover:bg-rose-950/20 text-zinc-500 hover:text-rose-400 border border-zinc-800 hover:border-rose-900/45 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer transition-all"
-                          >
-                            RELEASE
-                          </button>
+                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                            <button
+                              id={`unmount-btn-${drive.id}`}
+                              onClick={() => handleUnmountDrive(drive.id)}
+                              className="bg-zinc-950 hover:bg-rose-950/35 text-zinc-500 hover:text-rose-400 border border-zinc-850 hover:border-rose-900/40 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer transition-all active:scale-95"
+                              title="Safely release storage node locks from current Workspace session."
+                            >
+                              RELEASE
+                            </button>
+                            <span className={`text-[8.5px] px-1 py-0.1 border rounded uppercase font-bold font-mono tracking-wider ${isSim ? 'bg-amber-955/15 text-amber-500 border-amber-950/20' : 'bg-emerald-950/20 text-emerald-400 border-emerald-900/20'}`}>
+                              {isSim ? 'SANDBOX' : 'PHYS_SSD'}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Capacity gauge */}
-                        <div className="space-y-1 font-mono text-[9.5px]">
-                          <div className="w-full bg-zinc-950 h-1 rounded-sm overflow-hidden flex">
-                            <div className="bg-cyan-500/80 h-full" style={{ width: `${pct}%` }} />
+                        <div className="space-y-1.5 font-mono text-[9.5px]">
+                          <div className="w-full bg-zinc-950 h-1.5 rounded-sm overflow-hidden flex border border-zinc-900">
+                            <div className={`${barColor} h-full rounded-sm transition-all duration-500`} style={{ width: `${pct}%` }} />
                           </div>
-                          <div className="flex justify-between text-zinc-500">
-                            <span>Used: {pct}%</span>
-                            <span>{drive.capacity}</span>
+                          <div className="flex justify-between items-center text-zinc-500">
+                            <span className={`font-bold font-mono ${badgeStyles} px-1 rounded-sm text-[8px]`}>
+                              {spaceStatusLabel} ({pct}%)
+                            </span>
+                            <span className="text-zinc-400 font-medium">{drive.capacity}</span>
                           </div>
                         </div>
                       </div>
@@ -1112,33 +1200,44 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
 
               {/* Mounting Trigger button */}
               {isSimulation ? (
-                <div className="space-y-2 pt-1 border-t border-zinc-850 font-mono">
+                <div className="space-y-2 pt-1.5 border-t border-zinc-850 font-mono">
                   <span className="text-[10px] text-zinc-400 uppercase font-bold block">Mount virtual premium SSDs:</span>
                   <div className="grid grid-cols-2 gap-2">
                     {SIMULATED_DRIVE_PRESETS.map(preset => {
                       const isMounted = mountedDrives.some(d => d.id === preset.id);
                       return (
-                        <button
-                          id={`mount-preset-${preset.id}`}
-                          key={preset.id}
-                          onClick={() => {
-                            if (isMounted) {
-                              handleUnmountDrive(preset.id);
-                            } else {
-                              handleMountSimulatedPreset(preset.id);
-                            }
-                          }}
-                          className={`text-left p-2 rounded border text-[11px] transition-all flex flex-col justify-between h-auto ${
-                            isMounted 
-                              ? 'bg-zinc-905 border-cyan-800/40 text-cyan-400' 
-                              : 'bg-zinc-950/60 border-zinc-850 hover:border-zinc-750 text-zinc-400'
-                          }`}
-                        >
-                          <span className="font-bold block truncate">{preset.name}</span>
-                          <span className="text-[9.5px] text-zinc-500 mt-1 block">
-                            {isMounted ? '• ACTIVE' : '+ MOUNT SSD'}
-                          </span>
-                        </button>
+                        <div key={preset.id} className="relative group/preset">
+                          <button
+                            id={`mount-preset-${preset.id}`}
+                            onClick={() => {
+                              if (isMounted) {
+                                handleUnmountDrive(preset.id);
+                              } else {
+                                handleMountSimulatedPreset(preset.id);
+                              }
+                            }}
+                            className={`w-full text-left p-2 rounded border text-[11px] transition-all flex flex-col justify-between h-auto cursor-pointer ${
+                              isMounted 
+                                ? 'bg-cyan-950/25 border-cyan-500/40 text-cyan-400 font-bold shadow-sm' 
+                                : 'bg-zinc-950/60 border-zinc-850 hover:border-zinc-750 text-zinc-400'
+                            }`}
+                          >
+                            <span className="font-bold block truncate">{preset.name}</span>
+                            <span className="text-[9.5px] mt-1 block font-bold">
+                              {isMounted ? '• ACTIVE' : '+ MOUNT SSD'}
+                            </span>
+                          </button>
+
+                          {/* Preset Hover Tooltip */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/preset:block bg-zinc-950 border border-zinc-850 p-2.5 rounded shadow-2xl z-50 text-[10px] text-zinc-400 font-mono leading-relaxed w-52 pointer-events-none transition-all">
+                            <span className="text-amber-400 font-bold block mb-1">STAGING DIRECTORY INFO</span>
+                            <p className="font-bold text-zinc-250">{preset.name}</p>
+                            <p className="text-[9px] text-zinc-500 mt-0.5 font-mono">Size Limit: {preset.capacity}</p>
+                            <p className="mt-1.5 border-t border-zinc-850 pt-1 text-zinc-350">
+                              Contains {preset.folders.length} directories holding high-bitrate raw files ({preset.folders.reduce((acc, f) => acc + f.files.length, 0)} items) for safe backup.
+                            </p>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1155,7 +1254,7 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
             </div>
 
             {/* Target Destination Storage volume Selection */}
-            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-3">
+            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-3 shadow-sm">
               <div className="flex items-center justify-between border-b border-zinc-850 pb-2 font-mono">
                 <span className="text-[11px] font-bold text-zinc-350 uppercase tracking-wide flex items-center gap-1.5">
                   <Database className="w-3.5 h-3.5 text-cyan-400" />
@@ -1167,26 +1266,36 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
               {isSimulation ? (
                 <div className="space-y-1.5 font-mono text-xs">
                   {OMV_NFS_TARGET_PRESETS.map(preset => (
-                    <button
-                      id={`target-preset-${preset.id}`}
-                      key={preset.id}
-                      onClick={() => setActiveDestId(preset.id)}
-                      className={`w-full p-2 rounded border text-left flex items-center justify-between transition-all cursor-pointer ${
-                        activeDestId === preset.id
-                          ? 'bg-zinc-900 border-cyan-500/25 text-cyan-400 shadow-sm'
-                          : 'bg-zinc-950/30 border-zinc-85 * text-zinc-400 hover:border-zinc-800 hover:text-zinc-300'
-                      }`}
-                    >
-                      <span className="truncate flex items-center gap-1.5 font-bold">
-                        <Server className="w-3 h-3 text-zinc-500" />
-                        {preset.label}
-                      </span>
-                      <span className="text-[9.5px] text-zinc-550 truncate">nfs://192.168.1.150/{preset.path.split('/').pop()}</span>
-                    </button>
+                    <div key={preset.id} className="relative group/target">
+                      <button
+                        id={`target-preset-${preset.id}`}
+                        onClick={() => setActiveDestId(preset.id)}
+                        className={`w-full p-2 rounded border text-left flex items-center justify-between transition-all cursor-pointer ${
+                          activeDestId === preset.id
+                            ? 'bg-cyan-950/20 border-cyan-500/25 text-cyan-400 font-bold shadow-sm'
+                            : 'bg-zinc-950/30 border-zinc-85 * text-zinc-400 hover:border-zinc-800 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span className="truncate flex items-center gap-1.5 font-bold">
+                          <Server className="w-3 h-3 text-zinc-500" />
+                          {preset.label}
+                        </span>
+                        <span className="text-[9.5px] text-zinc-550 truncate">nfs://192.168.1.150/{preset.path.split('/').pop()}</span>
+                      </button>
+
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover/target:block bg-zinc-950 border border-zinc-855 p-2.5 rounded shadow-2xl z-50 text-[10px] text-zinc-400 font-mono leading-relaxed w-64 pointer-events-none transition-all">
+                        <span className="text-cyan-400 font-bold block mb-1">OMV NFS ARCHIVE SHARE</span>
+                        <p>Destination Path: <span className="text-zinc-300 font-bold">/{preset.path}</span></p>
+                        <p className="mt-1.5 border-t border-zinc-850 pt-1 text-zinc-355 text-[9.5px]">
+                          Maintains a network file storage endpoint formatted for high-redundancy backup, safe encryption, and Immediate Catalogs lookup.
+                        </p>
+                      </div>
+                    </div>
                   ))}
 
                   <div className="pt-2">
-                    <label className="text-[10px] text-zinc-550 block mb-1 uppercase uppercase tracking-wider font-bold">Custom Subdirectory path:</label>
+                    <label className="text-[10px] text-zinc-550 block mb-1 uppercase tracking-wider font-bold">Custom Subdirectory path:</label>
                     <input
                       id="custom-dest-input"
                       type="text"
@@ -1214,50 +1323,76 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
 
               <div className="bg-zinc-900/60 p-2.5 rounded border border-zinc-850 space-y-1 font-mono text-[10.5px]">
                 <div className="text-zinc-500 uppercase font-bold text-[9px]">Destination Summary Path:</div>
-                <div className="text-emerald-400 truncate font-semibold" title={chosenDestPath}>{chosenDestPath}</div>
+                <div className="text-emerald-450 truncate font-semibold" title={chosenDestPath}>{chosenDestPath}</div>
               </div>
             </div>
 
             {/* Profile Configurations */}
-            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-3 font-mono text-xs">
+            <div className="bg-zinc-950/40 p-4 rounded border border-zinc-800 space-y-3 font-mono text-xs shadow-sm">
               <span className="text-[11px] font-bold text-zinc-350 border-b border-zinc-850 pb-2 block uppercase tracking-wide font-mono">PIPELINE_FLOW_CONFIG</span>
               
-              <div className="space-y-2 pt-1 font-mono text-[11px]">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    id="chk-integrity"
-                    type="checkbox"
-                    checked={config.integrityCheck}
-                    onChange={(e) => setConfig({ ...config, integrityCheck: e.target.checked })}
-                    className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400"
-                  />
-                  <span className="text-zinc-400 select-none">SHA-256 integrity checks</span>
-                </label>
+              <div className="space-y-3 pt-1 font-mono text-[11px]">
+                
+                {/* Checkbox 1 */}
+                <div className="relative group/opt">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      id="chk-integrity"
+                      type="checkbox"
+                      checked={config.integrityCheck}
+                      onChange={(e) => setConfig({ ...config, integrityCheck: e.target.checked })}
+                      className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400 cursor-pointer"
+                    />
+                    <span className="text-zinc-400 select-none hover:text-zinc-300 transition-colors">SHA-256 integrity checks</span>
+                  </label>
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-0 mb-2.5 hidden group-hover/opt:block w-64 bg-zinc-950 border border-zinc-850 p-2.5 rounded shadow-2xl text-[10 px] text-zinc-400 font-mono leading-relaxed z-50 pointer-events-none transition-all">
+                    <span className="text-cyan-400 font-bold block mb-1">✓ INTEGRITY ASSURANCE</span>
+                    Compares SHA-256 block checksums on the source storage and target NFS post-copy to guarantee bit-perfect, uncorrupted backup.
+                  </div>
+                </div>
 
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    id="chk-skips"
-                    type="checkbox"
-                    checked={config.skipExisting}
-                    onChange={(e) => setConfig({ ...config, skipExisting: e.target.checked })}
-                    className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400"
-                  />
-                  <span className="text-zinc-400 select-none">Skip duplicate files</span>
-                </label>
+                {/* Checkbox 2 */}
+                <div className="relative group/opt">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      id="chk-skips"
+                      type="checkbox"
+                      checked={config.skipExisting}
+                      onChange={(e) => setConfig({ ...config, skipExisting: e.target.checked })}
+                      className="rounded text-cyan-500 bg-zinc-900 border-zinc-700 h-3.5 w-3.5 accent-cyan-400 cursor-pointer"
+                    />
+                    <span className="text-zinc-400 select-none hover:text-zinc-300 transition-colors">Skip duplicate files</span>
+                  </label>
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-0 mb-2.5 hidden group-hover/opt:block w-64 bg-zinc-950 border border-zinc-850 p-2.5 rounded shadow-2xl text-[10px] text-zinc-400 font-mono leading-relaxed z-50 pointer-events-none transition-all">
+                    <span className="text-cyan-400 font-bold block mb-1">⟲ SKIP_DUPLICATE LOGIC</span>
+                    Bypasses copying files that already exist on the target OMV share with matching filenames and sizes to conserve time & bandwidth.
+                  </div>
+                </div>
 
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    id="chk-delete"
-                    type="checkbox"
-                    checked={config.deleteAfterCopy}
-                    onChange={(e) => setConfig({ ...config, deleteAfterCopy: e.target.checked })}
-                    className="rounded text-rose-500 bg-zinc-900 border-rose-950 h-3.5 w-3.5 accent-rose-500"
-                  />
-                  <span className="text-rose-400 select-none font-bold uppercase text-[10px]">Trim stages post-write</span>
-                </label>
+                {/* Checkbox 3 */}
+                <div className="relative group/opt">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      id="chk-delete"
+                      type="checkbox"
+                      checked={config.deleteAfterCopy}
+                      onChange={(e) => setConfig({ ...config, deleteAfterCopy: e.target.checked })}
+                      className="rounded text-rose-500 bg-zinc-900 border-rose-950 h-3.5 w-3.5 accent-rose-500 cursor-pointer"
+                    />
+                    <span className="text-rose-400 select-none font-bold uppercase text-[10px] hover:text-rose-350 transition-colors">Trim stages post-write</span>
+                  </label>
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-0 mb-2.5 hidden group-hover/opt:block w-64 bg-zinc-950 border border-zinc-850 p-2.5 rounded shadow-2xl text-[10px] text-zinc-400 font-mono leading-relaxed z-50 pointer-events-none transition-all">
+                    <span className="text-rose-400 font-bold block mb-1">⚠️ SECURE PURGE DAEMON</span>
+                    Safely purges the source raw file buffer on original staging storage ONLY after verifying perfect delivery to destination.
+                  </div>
+                </div>
 
-                <div className="flex items-center justify-between pt-1 font-mono text-xs">
-                  <span className="text-zinc-505 uppercase text-[10px]">THREADS_CONCURRENCY</span>
+                {/* Dropdown Select 4 */}
+                <div className="relative group/opt flex items-center justify-between pt-1 font-mono text-xs">
+                  <span className="text-zinc-500 uppercase text-[10px]">THREADS_CONCURRENCY</span>
                   <select
                     id="sel-concurrency"
                     value={config.concurrencyLimit}
@@ -1268,7 +1403,14 @@ export default function ArchiverConsole({ onSessionComplete }: ArchiverConsolePr
                     <option value="2">2 (Optimal Bandwidth)</option>
                     <option value="4">4 (Turbo 10G link)</option>
                   </select>
+
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full right-0 mb-2.5 hidden group-hover/opt:block w-64 bg-zinc-950 border border-zinc-850 p-2.5 rounded shadow-2xl text-[10px] text-zinc-400 font-mono leading-relaxed z-50 pointer-events-none transition-all">
+                    <span className="text-cyan-400 font-bold block mb-1">⚙️ CONCURRENT WORK PIPES</span>
+                    Controls the number of files transferred in parallel. Higher threads leverage full 10-Gbps network routers under high-speed physical copy.
+                  </div>
                 </div>
+
               </div>
             </div>
 
