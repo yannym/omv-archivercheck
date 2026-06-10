@@ -1,0 +1,6 @@
+{
+  "name": "Photo Project NAS Archiver",
+  "description": "Automate raw photo shoots archival backups from local SSDs to OMV NAS NFS shares with SHA-256 integrity checkers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
